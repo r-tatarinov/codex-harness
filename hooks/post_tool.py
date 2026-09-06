@@ -11,19 +11,56 @@ STATE_DIR = HARNESS_ROOT / "state"
 
 sys.path.insert(0, str(CHECKS_DIR))
 
-from regression import check_snapshot
+from regression import check_snapshot as check_quality_snapshot
+from ruff_regression import check_snapshot as check_ruff_snapshot
 
 
-def build_reason(regressions: list) -> str:
+def build_quality_lines(regressions: list) -> list[str]:
+    lines: list[str] = []
+
+    for finding in regressions:
+        lines.append(
+            f"- {finding.path}:{finding.line}: "
+            f"{finding.message}"
+        )
+
+    return lines
+
+
+def build_ruff_lines(regressions: list) -> list[str]:
+    lines: list[str] = []
+
+    for finding in regressions:
+        lines.append(
+            f"- {finding.path}:{finding.line}:{finding.column}: "
+            f"{finding.code} {finding.message}"
+        )
+
+    return lines
+
+
+def build_reason(
+    quality_regressions: list,
+    ruff_regressions: list,
+) -> str:
     lines = [
         "Code quality regression detected.",
         "",
         "Fix the following issues before continuing:",
     ]
 
-    for finding in regressions:
-        lines.append(
-            f"- {finding.path}:{finding.line}: {finding.message}"
+    if quality_regressions:
+        lines.append("")
+        lines.append("Quality rules:")
+        lines.extend(
+            build_quality_lines(quality_regressions)
+        )
+
+    if ruff_regressions:
+        lines.append("")
+        lines.append("Ruff:")
+        lines.extend(
+            build_ruff_lines(ruff_regressions)
         )
 
     return "\n".join(lines)
@@ -67,20 +104,37 @@ def main() -> int:
         return 0
 
     try:
-        regressions = check_snapshot(snapshot_path)
+        quality_regressions = check_quality_snapshot(
+            snapshot_path
+        )
 
-        if regressions:
+        ruff_regressions = check_ruff_snapshot(
+            snapshot_path
+        )
+
+        if quality_regressions or ruff_regressions:
             emit_block(
-                build_reason(regressions)
+                build_reason(
+                    quality_regressions=quality_regressions,
+                    ruff_regressions=ruff_regressions,
+                )
             )
 
-    except (OSError, SyntaxError, ValueError, KeyError) as exc:
+    except (
+        OSError,
+        SyntaxError,
+        ValueError,
+        KeyError,
+        RuntimeError,
+    ) as exc:
         emit_block(
             f"Code quality analysis failed: {exc}"
         )
 
     finally:
-        snapshot_path.unlink(missing_ok=True)
+        snapshot_path.unlink(
+            missing_ok=True,
+        )
 
     return 0
 
