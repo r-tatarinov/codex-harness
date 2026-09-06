@@ -1,0 +1,8 @@
+[python.functions]
+max_lines = 80
+max_branches = 10
+max_nesting = 4
+max_complexity = 12
+
+[python.architecture]
+block_unexpected_module_functions = true
