@@ -6,12 +6,11 @@ from python_ruff import (
     analyze_source,
     find_regressions,
 )
+from ruff_metrics import METRIC_CODES
 
 
 def load_snapshot(snapshot_path: Path) -> dict:
-    return json.loads(
-        snapshot_path.read_text(encoding="utf-8")
-    )
+    return json.loads(snapshot_path.read_text(encoding="utf-8"))
 
 
 def analyze_before(
@@ -60,8 +59,9 @@ def compare_file(
     )
 
     return find_regressions(
-        before=before,
-        after=after,
+        # The quality pass owns these rules and compares their numeric values.
+        before=[item for item in before if item.code not in METRIC_CODES],
+        after=[item for item in after if item.code not in METRIC_CODES],
     )
 
 
@@ -83,4 +83,3 @@ def check_snapshot(
         )
 
     return regressions
-

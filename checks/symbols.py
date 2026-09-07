@@ -43,4 +43,3 @@ def build_symbol_index(tree: ast.AST) -> dict[int, str]:
     index.visit(tree)
 
     return index.symbols
-

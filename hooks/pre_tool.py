@@ -5,7 +5,6 @@ import re
 import sys
 from pathlib import Path
 
-
 HARNESS_ROOT = Path.home() / ".codex" / "harness"
 STATE_DIR = HARNESS_ROOT / "state"
 
@@ -112,4 +111,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-

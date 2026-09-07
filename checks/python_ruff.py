@@ -7,7 +7,6 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
-
 RUFF = Path.home() / ".local" / "bin" / "ruff"
 
 
@@ -24,14 +23,17 @@ class RuffFinding:
         return self.code, self.message
 
 
-def analyze_source(
+def run_check(
     source: str,
     path: Path,
+    options: tuple[str, ...] = (),
 ) -> list[RuffFinding]:
+    path = path.resolve()
     result = subprocess.run(
         [
             str(RUFF),
             "check",
+            *options,
             "--output-format",
             "json",
             "--stdin-filename",
@@ -42,35 +44,44 @@ def analyze_source(
         text=True,
         capture_output=True,
         cwd=path.parent,
+        check=False,
     )
 
     if result.returncode not in (0, 1):
         raise RuntimeError(
-            result.stderr.strip()
-            or f"Ruff failed with exit code {result.returncode}"
+            result.stderr.strip() or f"Ruff failed with exit code {result.returncode}"
         )
 
-    if not result.stdout.strip():
-        return []
+    try:
+        diagnostics = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("Ruff returned invalid JSON") from exc
 
-    diagnostics = json.loads(result.stdout)
+    if not isinstance(diagnostics, list):
+        raise TypeError("Ruff diagnostics must be a JSON array")
 
     findings: list[RuffFinding] = []
 
     for diagnostic in diagnostics:
-        location = diagnostic["location"]
-
-        findings.append(
-            RuffFinding(
-                code=diagnostic["code"],
-                message=diagnostic["message"],
-                path=str(path),
-                line=location["row"],
-                column=location["column"],
+        try:
+            location = diagnostic["location"]
+            findings.append(
+                RuffFinding(
+                    code=diagnostic["code"],
+                    message=diagnostic["message"],
+                    path=str(path),
+                    line=location["row"],
+                    column=location["column"],
+                )
             )
-        )
+        except (KeyError, TypeError) as exc:
+            raise RuntimeError("Ruff returned a malformed diagnostic") from exc
 
     return findings
+
+
+def analyze_source(source: str, path: Path) -> list[RuffFinding]:
+    return run_check(source, path)
 
 
 def analyze_file(path: Path) -> list[RuffFinding]:
@@ -86,10 +97,7 @@ def find_regressions(
     before: list[RuffFinding],
     after: list[RuffFinding],
 ) -> list[RuffFinding]:
-    before_counts = Counter(
-        finding.key
-        for finding in before
-    )
+    before_counts = Counter(finding.key for finding in before)
 
     regressions: list[RuffFinding] = []
 
@@ -115,9 +123,7 @@ def print_findings(
 
 def main() -> int:
     python_files = [
-        Path(argument)
-        for argument in sys.argv[1:]
-        if Path(argument).suffix == ".py"
+        Path(argument) for argument in sys.argv[1:] if Path(argument).suffix == ".py"
     ]
 
     findings: list[RuffFinding] = []
@@ -126,9 +132,7 @@ def main() -> int:
         if not path.is_file():
             continue
 
-        findings.extend(
-            analyze_file(path)
-        )
+        findings.extend(analyze_file(path))
 
     if not findings:
         return 0
@@ -140,4 +144,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-

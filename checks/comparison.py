@@ -4,10 +4,7 @@ from finding import Finding
 def build_index(
     findings: list[Finding],
 ) -> dict[tuple[str, str], Finding]:
-    return {
-        finding.key: finding
-        for finding in findings
-    }
+    return {finding.key: finding for finding in findings}
 
 
 def is_regression(
@@ -35,4 +32,3 @@ def find_regressions(
             regressions.append(finding)
 
     return regressions
-

@@ -7,9 +7,7 @@ from finding import Finding
 
 
 def load_snapshot(snapshot_path: Path) -> dict:
-    return json.loads(
-        snapshot_path.read_text(encoding="utf-8")
-    )
+    return json.loads(snapshot_path.read_text(encoding="utf-8"))
 
 
 def analyze_before(
@@ -90,4 +88,3 @@ def check_snapshot(
         )
 
     return regressions
-

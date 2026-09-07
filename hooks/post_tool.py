@@ -4,7 +4,6 @@ import json
 import sys
 from pathlib import Path
 
-
 HARNESS_ROOT = Path.home() / ".codex" / "harness"
 CHECKS_DIR = HARNESS_ROOT / "checks"
 STATE_DIR = HARNESS_ROOT / "state"
@@ -19,10 +18,7 @@ def build_quality_lines(regressions: list) -> list[str]:
     lines: list[str] = []
 
     for finding in regressions:
-        lines.append(
-            f"- {finding.path}:{finding.line}: "
-            f"{finding.message}"
-        )
+        lines.append(f"- {finding.path}:{finding.line}: {finding.message}")
 
     return lines
 
@@ -52,16 +48,12 @@ def build_reason(
     if quality_regressions:
         lines.append("")
         lines.append("Quality rules:")
-        lines.extend(
-            build_quality_lines(quality_regressions)
-        )
+        lines.extend(build_quality_lines(quality_regressions))
 
     if ruff_regressions:
         lines.append("")
         lines.append("Ruff:")
-        lines.extend(
-            build_ruff_lines(ruff_regressions)
-        )
+        lines.extend(build_ruff_lines(ruff_regressions))
 
     return "\n".join(lines)
 
@@ -104,13 +96,9 @@ def main() -> int:
         return 0
 
     try:
-        quality_regressions = check_quality_snapshot(
-            snapshot_path
-        )
+        quality_regressions = check_quality_snapshot(snapshot_path)
 
-        ruff_regressions = check_ruff_snapshot(
-            snapshot_path
-        )
+        ruff_regressions = check_ruff_snapshot(snapshot_path)
 
         if quality_regressions or ruff_regressions:
             emit_block(
@@ -123,13 +111,12 @@ def main() -> int:
     except (
         OSError,
         SyntaxError,
+        TypeError,
         ValueError,
         KeyError,
         RuntimeError,
     ) as exc:
-        emit_block(
-            f"Code quality analysis failed: {exc}"
-        )
+        emit_block(f"Code quality analysis failed: {exc}")
 
     finally:
         snapshot_path.unlink(
@@ -141,4 +128,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-

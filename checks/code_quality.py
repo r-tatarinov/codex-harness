@@ -6,12 +6,10 @@ import tomllib
 from pathlib import Path
 
 from finding import Finding
-from rules.branches import check as check_branches
-from rules.complexity import check as check_complexity
+from ruff_metrics import check as check_ruff_metrics
 from rules.function_length import check as check_function_length
 from rules.nesting import check as check_nesting
 from symbols import build_symbol_index
-
 
 HARNESS_ROOT = Path.home() / ".codex" / "harness"
 CONFIG_PATH = HARNESS_ROOT / "config" / "quality.toml"
@@ -56,19 +54,10 @@ def analyze_source(
     )
 
     findings.extend(
-        check_branches(
+        check_ruff_metrics(
+            source=source,
             tree=tree,
             path=path,
-            max_branches=function_config["max_branches"],
-            symbols=symbols,
-        )
-    )
-
-    findings.extend(
-        check_complexity(
-            tree=tree,
-            path=path,
-            max_complexity=function_config["max_complexity"],
             symbols=symbols,
         )
     )
@@ -93,18 +82,11 @@ def print_findings(findings: list[Finding]) -> None:
     print("CODE QUALITY CHECK FAILED")
 
     for finding in findings:
-        print(
-            f"- {finding.path}:{finding.line}: "
-            f"{finding.message}"
-        )
+        print(f"- {finding.path}:{finding.line}: {finding.message}")
 
 
 def get_python_files(arguments: list[str]) -> list[Path]:
-    return [
-        Path(argument)
-        for argument in arguments
-        if Path(argument).suffix == ".py"
-    ]
+    return [Path(argument) for argument in arguments if Path(argument).suffix == ".py"]
 
 
 def main() -> int:
@@ -124,7 +106,14 @@ def main() -> int:
                     config=config,
                 )
             )
-        except (OSError, SyntaxError) as exc:
+        except (
+            OSError,
+            SyntaxError,
+            TypeError,
+            ValueError,
+            KeyError,
+            RuntimeError,
+        ) as exc:
             print(
                 f"{path}: cannot analyze file: {exc}",
                 file=sys.stderr,
@@ -141,4 +130,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-

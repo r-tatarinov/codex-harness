@@ -3,7 +3,6 @@ from pathlib import Path
 
 from finding import Finding
 
-
 NESTING_NODES = (
     ast.If,
     ast.For,
@@ -47,9 +46,8 @@ def get_max_depth(
 
         child_depth = depth
 
-        if isinstance(child, NESTING_NODES):
-            if not is_elif(node, child):
-                child_depth += 1
+        if isinstance(child, NESTING_NODES) and not is_elif(node, child):
+            child_depth += 1
 
         max_depth = max(
             max_depth,
@@ -98,12 +96,8 @@ def check(
                 line=node.lineno,
                 value=depth,
                 limit=max_nesting,
-                message=(
-                    f"{symbol} has nesting depth {depth} "
-                    f"(maximum {max_nesting})"
-                ),
+                message=(f"{symbol} has nesting depth {depth} (maximum {max_nesting})"),
             )
         )
 
     return findings
-

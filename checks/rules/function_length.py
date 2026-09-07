@@ -43,12 +43,8 @@ def check(
                 line=node.lineno,
                 value=lines,
                 limit=max_lines,
-                message=(
-                    f"{symbol} has {lines} lines "
-                    f"(maximum {max_lines})"
-                ),
+                message=(f"{symbol} has {lines} lines (maximum {max_lines})"),
             )
         )
 
     return findings
-
