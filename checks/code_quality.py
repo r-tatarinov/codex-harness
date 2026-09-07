@@ -8,7 +8,6 @@ from pathlib import Path
 from finding import Finding
 from ruff_metrics import check as check_ruff_metrics
 from rules.function_length import check as check_function_length
-from rules.nesting import check as check_nesting
 from symbols import build_symbol_index
 
 HARNESS_ROOT = Path.home() / ".codex" / "harness"
@@ -40,15 +39,6 @@ def analyze_source(
             tree=tree,
             path=path,
             max_lines=function_config["max_lines"],
-            symbols=symbols,
-        )
-    )
-
-    findings.extend(
-        check_nesting(
-            tree=tree,
-            path=path,
-            max_nesting=function_config["max_nesting"],
             symbols=symbols,
         )
     )

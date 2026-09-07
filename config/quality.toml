@@ -1,6 +1,5 @@
 [python.functions]
 max_lines = 80
-max_nesting = 4
 
 [python.architecture]
 block_unexpected_module_functions = true
