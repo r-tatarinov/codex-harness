@@ -2,7 +2,7 @@
 target-version = "py312"
 
 [tool.ruff.lint]
-extend-select = ["C901", "PLR0912", "PLR1702"]
+extend-select = ["C901", "PLC0415", "PLR0912", "PLR1702"]
 preview = true
 explicit-preview-rules = true
 
