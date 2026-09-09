@@ -1,34 +1,20 @@
+"""Numeric regression policy shared by custom length and Ruff metrics."""
+
 from finding import Finding
-
-
-def build_index(
-    findings: list[Finding],
-) -> dict[tuple[str, str], Finding]:
-    return {finding.key: finding for finding in findings}
-
-
-def is_regression(
-    before: Finding | None,
-    after: Finding,
-) -> bool:
-    if before is None:
-        return True
-
-    return after.value > before.value
 
 
 def find_regressions(
     before: list[Finding],
     after: list[Finding],
 ) -> list[Finding]:
-    before_index = build_index(before)
+    before_index = {finding.key: finding for finding in before}
 
     regressions: list[Finding] = []
 
     for finding in after:
         previous = before_index.get(finding.key)
 
-        if is_regression(previous, finding):
+        if previous is None or finding.value > previous.value:
             regressions.append(finding)
 
     return regressions

@@ -1,90 +1,43 @@
 import json
 from pathlib import Path
 
-from code_quality import analyze_source, load_config
+from code_quality import SourceSyntaxError, analyze_source, load_config
 from comparison import find_regressions
 from finding import Finding
 
 
-def load_snapshot(snapshot_path: Path) -> dict:
-    return json.loads(snapshot_path.read_text(encoding="utf-8"))
-
-
-def analyze_before(
+def _analyze_baseline(
     path: Path,
     file_state: dict,
     config: dict,
 ) -> list[Finding]:
-    if not file_state["exists"]:
+    if not file_state["exists"] or file_state["content"] is None:
         return []
 
-    source = file_state["content"]
-
-    if source is None:
+    try:
+        return analyze_source(source=file_state["content"], path=path, config=config)
+    except SourceSyntaxError:
+        # No usable old metrics: apply the limits to the corrected source.
         return []
-
-    return analyze_source(
-        source=source,
-        path=path,
-        config=config,
-    )
-
-
-def analyze_after(
-    path: Path,
-    config: dict,
-) -> list[Finding]:
-    if not path.is_file():
-        return []
-
-    source = path.read_text(encoding="utf-8")
-
-    return analyze_source(
-        source=source,
-        path=path,
-        config=config,
-    )
-
-
-def compare_file(
-    path: Path,
-    file_state: dict,
-    config: dict,
-) -> list[Finding]:
-    before = analyze_before(
-        path=path,
-        file_state=file_state,
-        config=config,
-    )
-
-    after = analyze_after(
-        path=path,
-        config=config,
-    )
-
-    return find_regressions(
-        before=before,
-        after=after,
-    )
 
 
 def check_snapshot(
     snapshot_path: Path,
 ) -> list[Finding]:
-    snapshot = load_snapshot(snapshot_path)
+    snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
     config = load_config()
 
     regressions: list[Finding] = []
 
     for raw_path, file_state in snapshot["files"].items():
         path = Path(raw_path)
-
-        regressions.extend(
-            compare_file(
-                path=path,
-                file_state=file_state,
-                config=config,
-            )
-        )
+        before = _analyze_baseline(path, file_state, config)
+        try:
+            source = path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            after = []
+        else:
+            after = analyze_source(source, path, config)
+        regressions.extend(find_regressions(before, after))
 
     return regressions

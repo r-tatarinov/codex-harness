@@ -1,4 +1,4 @@
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
@@ -8,12 +8,8 @@ class Finding:
     symbol: str
     line: int
     value: int
-    limit: int
     message: str
 
     @property
     def key(self) -> tuple[str, str]:
         return self.rule, self.symbol
-
-    def to_dict(self) -> dict:
-        return asdict(self)

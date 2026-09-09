@@ -1,5 +1,5 @@
+[verification]
+max_attempts = 3
+
 [python.functions]
 max_lines = 80
-
-[python.architecture]
-block_unexpected_module_functions = true

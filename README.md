@@ -126,7 +126,7 @@ if condition:
 
 Такой код становится сложнее читать, тестировать и изменять.
 
-Глубину вычисляет Ruff `PLR1702`; собственный nesting checker удалён. Принимается семантика Ruff: сам `match` не добавляет уровень, а блоки во вложенных функциях могут влиять на оценку внешней функции. Для правила включён preview только lint; preview formatter выключен.
+Глубину вычисляет Ruff `PLR1702`. Принимается семантика Ruff: сам `match` не добавляет уровень, а блоки во вложенных функциях могут влиять на оценку внешней функции. Для правила включён preview только lint; preview formatter выключен.
 
 PLR1702 может сообщать о нескольких блоках внутри функции. Harness связывает каждую диагностику с самой внутренней функцией, содержащей начало указанного блока, и сравнивает максимальное значение по полному имени функции. При одинаковой глубине выбирается первый блок по расположению. Например, переход с глубины 6 на 5 допускается, с 5 на 6 блокируется; перестановка блоков с сохранением максимума допускается.
 
@@ -152,7 +152,7 @@ finally
 match / case
 ```
 
-Это ограничение объёма управляющей логики. Например, `if/else` считается двумя ветвями; старый собственный счётчик учитывал только одну. Семантика и лимит намеренно изменены, старый счётчик удалён.
+Это ограничение объёма управляющей логики. Например, Ruff считает `if/else` двумя ветвями. Значение `max-branches` относится к этой метрике.
 
 ### Сложность функции
 
@@ -162,9 +162,9 @@ match / case
 max-complexity = 10
 ```
 
-Для расчёта используется Ruff `C901` (McCabe). Собственный адаптер Radon удалён, пакет Radon больше не требуется.
+Для расчёта используется Ruff `C901` (McCabe).
 
-Правило ограничивает структурную сложность функций, методов и вложенных функций. Это осознанный компромисс ради упрощения Harness: `and/or`, условные выражения и comprehension не повышают C901 так, как повышали сложность Radon. Например, `return a and b and c` даёт C901 = 1 вместо Radon = 3. C901 также учитывает вложенные определения при оценке внешней функции; вложенные функции диагностируются и отдельно.
+Правило ограничивает структурную сложность функций, методов и вложенных функций. `and/or`, условные выражения и comprehension не повышают C901. Например, `return a and b and c` даёт C901 = 1. C901 также учитывает вложенные определения при оценке внешней функции; вложенные функции диагностируются и отдельно.
 
 Описание правил: [C901](https://docs.astral.sh/ruff/rules/complex-structure/), [PLR0912](https://docs.astral.sh/ruff/rules/too-many-branches/), [PLR1702](https://docs.astral.sh/ruff/rules/too-many-nested-blocks/).
 
@@ -202,16 +202,33 @@ Harness возвращает её агенту.
 ```text
 codex-harness/
 ├── checks/
-│   ├── rules/
-│   │   └── function_length.py
-│   │
-│   ├── code_quality.py
+│   ├── code_quality/
+│   │   ├── __init__.py
+│   │   ├── __main__.py
+│   │   ├── cli.py
+│   │   ├── config.py
+│   │   └── service.py
+│   ├── code_quality.py       # совместимый CLI-launcher
 │   ├── comparison.py
 │   ├── finding.py
-│   ├── python_ruff.py
+│   ├── python_ruff/
+│   │   ├── __init__.py
+│   │   ├── __main__.py
+│   │   ├── cli.py
+│   │   ├── parsing.py
+│   │   ├── runner.py
+│   │   └── schema.py
+│   ├── python_ruff.py        # совместимый CLI-launcher
 │   ├── regression.py
-│   ├── ruff_metrics.py
+│   ├── ruff_metrics/
+│   │   ├── __init__.py
+│   │   ├── config.py
+│   │   ├── normalization.py
+│   │   └── service.py
 │   ├── ruff_regression.py
+│   ├── rules/
+│   │   ├── __init__.py
+│   │   └── function_length.py
 │   └── symbols.py
 │
 ├── config/
@@ -219,14 +236,39 @@ codex-harness/
 │
 ├── hooks/
 │   ├── pre_tool.py
-│   └── post_tool.py
+│   ├── post_tool.py
+│   └── retry_state.py
 │
 ├── state/
-│   └── runtime snapshots
+│   └── retry/<scope_hash>/ (attempts.json, patch snapshots, scope.lock)
 └── pyproject.toml
 ```
 
-`state/` содержит временные снимки файлов и не хранится в Git.
+`state/` содержит временные снимки файлов и состояние verification retry; не хранится в Git.
+
+### Ответственность модулей checks
+
+Ruff вычисляет C901 (complexity), PLR0912 (branches), PLR1702 (nesting) и проверяет PLC0415 (imports outside top level). В Harness нет параллельных реализаций этих правил. Три числовые метрики применяются с лимитами Harness; PLC0415, как и остальные обычные правила, выполняется в проходе с конфигурацией целевого проекта.
+
+| Модуль | Ответственность |
+| --- | --- |
+| `python_ruff/` | `schema.py` содержит `RuffFinding`; `runner.py` запускает Ruff; `parsing.py` проверяет JSON и нормализует диагностики; `cli.py` отвечает за вывод и exit code. Путь к executable `RUFF` принадлежит runner. |
+| `ruff_metrics/` | `config.py` хранит `CONFIG_PATH`, `METRIC_SETTINGS`, `METRIC_CODES`, читает лимиты и строит CLI options; `normalization.py` связывает диагностики с функциями, разбирает числовые значения и сводит PLR1702; `service.py` выполняет check flow. AST не вычисляет метрики повторно. |
+| `ruff_regression.py` | Чтение снимков и сравнение обычных Ruff-диагностик по коду, сообщению и количеству повторений; исключение метрик, сравниваемых численно. |
+| `finding.py` | Общая числовая диагностика для длины функции и метрик Ruff. |
+| `comparison.py` | Числовая regression-policy: новая диагностика или рост значения по паре `(rule, symbol)`. |
+| `regression.py` | Применение числовой regression-policy к состоянию файлов до/после; восстановление после синтаксически некорректного baseline. |
+| `symbols.py` | Полные имена функций, методов и вложенных функций для устойчивого сравнения при переносе строк. |
+| `rules/function_length.py` | Единственное custom-правило: физическая длина функции/метода, включая комментарии, пустые строки и docstring. `rules/__init__.py` обозначает пакет правил. |
+| `code_quality/` | `config.py` загружает quality TOML и валидирует retry limit; `service.py` содержит parsing исходника, `SourceSyntaxError` и общий анализ; `cli.py` формирует вывод и exit code. |
+
+Несколько диагностик PLR1702 для одной функции сводятся к максимальному значению, уже вычисленному Ruff. Это часть regression-policy: она позволяет сравнивать глубину до/после, не вычисляя вложенность повторно. Числовое сравнение и сравнение обычных диагностик разделены, поскольку у них разные ключи и семантика: улучшение превышенной метрики допускается, а повторения обычных нарушений учитываются по количеству.
+
+Каждый новый package предоставляет публичный API через `__init__.py` с явным `__all__`; бизнес-логики в фасадах нет. Потребители продолжают использовать `from python_ruff import RuffFinding, run_check`, `from ruff_metrics import check, METRIC_CODES` и `from code_quality import analyze_source, load_config, load_max_attempts, SourceSyntaxError`. Внутри packages используются относительные импорты.
+
+`finding.py` остаётся самостоятельной структурой числовой диагностики: отдельный каталог с единственным `schema.py` здесь не добавил бы ответственности. Компактные regression-модули, comparison, symbols и custom-правило также остаются обычными файлами.
+
+Старые команды `python3 checks/code_quality.py ...` и `python3 checks/python_ruff.py ...` сохранены короткими launcher-файлами. Обычный импорт выбирает одноимённый package. Когда `checks/` находится в пути поиска Python, доступны и `python3 -m code_quality ...`, `python3 -m python_ruff ...` через `__main__.py`; они используют тот же CLI.
 
 ## Требования
 
@@ -347,7 +389,7 @@ PostToolUse    1 installed / 1 active
 
 ## Настройка правил
 
-Ограничение длины функции находится в:
+Ограничения длины функции и количества verification attempts находятся в:
 
 ```text
 config/quality.toml
@@ -356,14 +398,14 @@ config/quality.toml
 Текущая конфигурация:
 
 ```toml
+[verification]
+max_attempts = 3
+
 [python.functions]
 max_lines = 80
-
-[python.architecture]
-block_unexpected_module_functions = true
 ```
 
-Архитектурная настройка сохранена, но её реализация и проверки зависимостей между слоями пока отсутствуют.
+Архитектурные проверки и проверки зависимостей между слоями пока не реализованы; неиспользуемая настройка `python.architecture.block_unexpected_module_functions` удалена.
 
 Лимиты Ruff находятся в `pyproject.toml` Harness и применяются hook ко всем проверяемым проектам:
 
@@ -372,7 +414,7 @@ block_unexpected_module_functions = true
 target-version = "py312"
 
 [tool.ruff.lint]
-extend-select = ["C901", "PLR0912", "PLR1702"]
+extend-select = ["C901", "PLC0415", "PLR0912", "PLR1702"]
 preview = true
 explicit-preview-rules = true
 
@@ -476,9 +518,11 @@ ruff format --check .
 Например:
 
 ```text
-Code quality regression detected.
+Verification failed.
+Verification attempt 1/3
 
-Fix the following issues before continuing:
+Last diagnostics:
+Code quality regression detected.
 
 Quality rules:
 - PaymentService.process has 110 lines (maximum 80)
@@ -487,7 +531,66 @@ Ruff:
 - F401 `os` imported but unused
 ```
 
-После этого агент получает информацию о проблеме и может исправить код следующей итерацией.
+После этого агент получает конкретную диагностику через `reason` и `additionalContext` и может исправить код следующей итерацией, пока бюджет текущего turn не исчерпан.
+
+### Лимит последовательных verification FAIL
+
+`[verification] max_attempts = 3` означает максимум три последовательных неуспешных correction attempts внутри одного пользовательского turn. Если параметр отсутствует, используется `3`. Допускаются только целые числа `>= 1`; boolean, строки и дробные значения недопустимы. Параметр читается существующим TOML loader.
+
+```text
+turn A
+patch            → FAIL 1/3
+correction patch → FAIL 2/3
+correction patch → FAIL 3/3
+next apply_patch → denied before changing files
+
+human sends a new message
+turn B           → fresh retry budget
+patch            → FAIL 1/3
+```
+
+После последнего FAIL и при запрете следующего `apply_patch` агент получает:
+
+```text
+Verification failed.
+Verification attempt 3/3
+Retry limit reached for the current turn.
+
+Last diagnostics:
+<последняя фактическая диагностика проверки>
+```
+
+`PreToolUse` возвращает `permissionDecision: "deny"` до изменения файлов, не создаёт снимок и не увеличивает attempts. Значение `4/3` не возникает. Запрет распространяется на любой следующий `apply_patch` в том же scope, включая непроверяемые файлы.
+
+Один attempt расходуется на один фактически изменяющий Python-код patch с общим результатом FAIL, независимо от количества файлов, правил или диагностик. Смена причины отказа, например PLC0415 → F401, не начинает отдельный бюджет.
+
+Релевантный PASS немедленно удаляет `attempts.json` текущего scope: `FAIL → FAIL → PASS → FAIL` даёт `1/3 → 2/3 → reset → 1/3`. PASS сохраняет существующую семантику отсутствия новых регрессий относительно снимка перед патчем, а не требует устранения всего старого технического долга. Изменение только README или другого непроверяемого файла, no-op Python patch, повторный hook и обычные действия агента не расходуют и не сбрасывают бюджет. Проверки запускаются только при изменении содержимого или существования отслеживаемого Python-файла.
+
+### Scope и состояние
+
+Scope — стабильный SHA-256 от JSON-массива `[session_identifier, resolved_cwd, turn_id]`. Используется `session_id` из payload; при отсутствии — `CODEX_THREAD_ID`, затем `CODEX_SESSION_ID`. Для turn требуется непустой корректный `turn_id` из payload: session-wide и глобального fallback нет. Новый turn получает другой каталог, не удаляя состояние предыдущего. Разные session и cwd также изолированы.
+
+`state/retry/<scope_hash>/attempts.json` содержит только `consecutive_failed_attempts` и `last_failure`. Снимки находятся в том же каталоге; их имена получаются из `tool_use_id`, который не входит в retry scope. Старые снимки непосредственно в `state/` новый механизм не использует.
+
+Операции защищены файловой блокировкой scope; JSON записывается через временный файл и атомарный replace. Post-hook забирает снимок переименованием перед verification и удаляет его перед сохранением результата. Повторная или конкурентная доставка того же PostToolUse не выполняет проверку заново и не увеличивает счётчик. При прерывании процесса может остаться файл `.processing`; он не обрабатывается повторно.
+
+Состояние прошлых turns — transient runtime state: оно не участвует в новых execution scopes. Автоматический garbage collector не добавлен.
+
+### Code failure и infrastructure failure
+
+Нарушения Ruff, quality-регрессии и SyntaxError при parsing изменённого source расходуют попытку. Ошибка parsing сохраняет имя файла, строку, колонку и сообщение. Если старый снимок синтаксически некорректен, прежние quality metrics считаются недоступными; исправленный файл проверяется по действующим лимитам. Это позволяет исправить SyntaxError в оставшиеся попытки.
+
+Невозможность запустить checker, timeout (10 секунд на один процесс Ruff), filesystem/permission error, неверная конфигурация, повреждённый retry state, malformed checker response, внутреннее исключение или неопределимый scope блокируют операцию с исходной инфраструктурной диагностикой, сохраняя attempts и `last_failure`. Они не считаются PASS. Тип ошибки определяется структурно; произвольный SyntaxError внутри Harness не считается ошибкой исходника агента.
+
+Известное ограничение адаптера: Ruff может вернуть `code: null` для синтаксической ошибки старого снимка. Текущий parser ожидает строковый код и в таком случае возвращает infrastructure failure даже после исправления source. Это существовавшее поведение сохранено при очистке модулей; восстановление после SyntaxError зависит от формата ответа установленного Ruff.
+
+### Подагенты
+
+Встроенные схемы установленного Codex предусматривают `agent_id`/`agent_type`, но не предоставляют root user turn identifier в tool hooks. При наличии этой явной agent metadata Harness блокирует патч как infrastructure failure без отдельного retry budget. Равенство parent/subagent `turn_id` не предполагается; связь не выводится из PID, времени или transcript.
+
+Ограничение: **shared retry budget for subagents is not supported without a reliable root turn identifier**. Проверка встроенной схемы не означает, что выполнен живой end-to-end тест подагента.
+
+Retry формируется последовательностью tool calls самого агента. Harness не запускает LLM, retry-agent, собственный agent loop или final verification gate.
 
 ## Текущие ограничения
 

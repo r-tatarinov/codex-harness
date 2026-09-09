@@ -1,50 +1,13 @@
-"""Global Harness metrics, measured by Ruff and compared numerically."""
+"""Map Ruff metric diagnostics to symbols and numeric regression findings."""
 
 import ast
 import re
-import tomllib
-from pathlib import Path
+from collections.abc import Iterable
 
 from finding import Finding
-from python_ruff import RuffFinding, run_check
+from python_ruff import RuffFinding
 
-CONFIG_PATH = Path(__file__).resolve().parents[1] / "pyproject.toml"
-METRIC_SETTINGS = {
-    "C901": ("mccabe", "max-complexity"),
-    "PLR0912": ("pylint", "max-branches"),
-    "PLR1702": ("pylint", "max-nested-blocks"),
-}
-METRIC_CODES = frozenset(METRIC_SETTINGS)
 MEASUREMENT_RE = re.compile(r"\((\d+) > (\d+)\)$")
-
-
-def load_limits() -> dict[str, int]:
-    with CONFIG_PATH.open("rb") as file:
-        lint = tomllib.load(file)["tool"]["ruff"]["lint"]
-
-    limits = {}
-    for code, (plugin, setting) in METRIC_SETTINGS.items():
-        value = lint[plugin][setting]
-        if type(value) is not int or value < 0:
-            raise ValueError(f"Invalid Harness Ruff limit: {plugin}.{setting}")
-        limits[code] = value
-    return limits
-
-
-def build_options(limits: dict[str, int]) -> tuple[str, ...]:
-    options = [
-        "--isolated",
-        "--ignore-noqa",
-        "--config",
-        "lint.preview=true",
-        "--config",
-        "lint.explicit-preview-rules=true",
-        "--select",
-        ",".join(METRIC_SETTINGS),
-    ]
-    for code, (plugin, setting) in METRIC_SETTINGS.items():
-        options.extend(("--config", f"lint.{plugin}.{setting}={limits[code]}"))
-    return tuple(options)
 
 
 def find_symbol(
@@ -87,12 +50,11 @@ def to_finding(
         symbol=symbol,
         line=diagnostic.line,
         value=value,
-        limit=limit,
         message=f"{diagnostic.code} {symbol}: {diagnostic.message}",
     )
 
 
-def collapse_nesting(findings: list[Finding]) -> list[Finding]:
+def collapse_nesting(findings: Iterable[Finding]) -> list[Finding]:
     others: list[Finding] = []
     nesting: dict[str, Finding] = {}
     for finding in findings:
@@ -105,25 +67,5 @@ def collapse_nesting(findings: list[Finding]) -> list[Finding]:
             -previous.line,
         ):
             nesting[finding.symbol] = finding
-    return others + sorted(nesting.values(), key=lambda item: item.line)
-
-
-def check(
-    source: str,
-    path: Path,
-    tree: ast.AST,
-    symbols: dict[int, str],
-) -> list[Finding]:
-    limits = load_limits()
-    functions = [
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-    ]
-    functions.sort(key=lambda node: (node.lineno, node.col_offset), reverse=True)
-    diagnostics = run_check(source, path, build_options(limits))
-    findings = [
-        to_finding(item, limits, find_symbol(item, functions, symbols))
-        for item in diagnostics
-    ]
-    return collapse_nesting(findings)
+    others.extend(sorted(nesting.values(), key=lambda item: item.line))
+    return others

@@ -13,13 +13,7 @@ def check(
     findings: list[Finding] = []
 
     for node in ast.walk(tree):
-        if not isinstance(
-            node,
-            (
-                ast.FunctionDef,
-                ast.AsyncFunctionDef,
-            ),
-        ):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
 
         if node.end_lineno is None:
@@ -30,10 +24,7 @@ def check(
         if lines <= max_lines:
             continue
 
-        symbol = symbols.get(
-            id(node),
-            node.name,
-        )
+        symbol = symbols.get(id(node), node.name)
 
         findings.append(
             Finding(
@@ -42,8 +33,7 @@ def check(
                 symbol=symbol,
                 line=node.lineno,
                 value=lines,
-                limit=max_lines,
-                message=(f"{symbol} has {lines} lines (maximum {max_lines})"),
+                message=f"{symbol} has {lines} lines (maximum {max_lines})",
             )
         )
 

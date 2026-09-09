@@ -1,85 +1,56 @@
+"""Compare Ruff diagnostics by code, message and occurrence count."""
+
 import json
+from collections import Counter
+from collections.abc import Iterable
 from pathlib import Path
 
-from python_ruff import (
-    RuffFinding,
-    analyze_source,
-    find_regressions,
-)
+from python_ruff import RuffFinding, analyze_source
 from ruff_metrics import METRIC_CODES
 
 
-def load_snapshot(snapshot_path: Path) -> dict:
-    return json.loads(snapshot_path.read_text(encoding="utf-8"))
-
-
-def analyze_before(
-    path: Path,
-    file_state: dict,
+def find_regressions(
+    before: Iterable[RuffFinding],
+    after: Iterable[RuffFinding],
 ) -> list[RuffFinding]:
-    if not file_state["exists"]:
-        return []
+    before_counts = Counter(finding.key for finding in before)
 
-    source = file_state["content"]
+    regressions: list[RuffFinding] = []
 
-    if source is None:
-        return []
+    for finding in after:
+        if before_counts[finding.key] > 0:
+            before_counts[finding.key] -= 1
+            continue
 
-    return analyze_source(
-        source=source,
-        path=path,
-    )
+        regressions.append(finding)
 
-
-def analyze_after(
-    path: Path,
-) -> list[RuffFinding]:
-    if not path.is_file():
-        return []
-
-    source = path.read_text(encoding="utf-8")
-
-    return analyze_source(
-        source=source,
-        path=path,
-    )
-
-
-def compare_file(
-    path: Path,
-    file_state: dict,
-) -> list[RuffFinding]:
-    before = analyze_before(
-        path=path,
-        file_state=file_state,
-    )
-
-    after = analyze_after(
-        path=path,
-    )
-
-    return find_regressions(
-        # The quality pass owns these rules and compares their numeric values.
-        before=[item for item in before if item.code not in METRIC_CODES],
-        after=[item for item in after if item.code not in METRIC_CODES],
-    )
+    return regressions
 
 
 def check_snapshot(
     snapshot_path: Path,
 ) -> list[RuffFinding]:
-    snapshot = load_snapshot(snapshot_path)
+    snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
 
     regressions: list[RuffFinding] = []
 
     for raw_path, file_state in snapshot["files"].items():
         path = Path(raw_path)
-
+        before = []
+        if file_state["exists"] and file_state["content"] is not None:
+            before = analyze_source(file_state["content"], path)
+        try:
+            source = path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            after = []
+        else:
+            after = analyze_source(source, path)
         regressions.extend(
-            compare_file(
-                path=path,
-                file_state=file_state,
-            )
+            # The quality pass owns these rules and compares their numeric values.
+            find_regressions(
+                before=(item for item in before if item.code not in METRIC_CODES),
+                after=(item for item in after if item.code not in METRIC_CODES),
+            ),
         )
 
     return regressions
