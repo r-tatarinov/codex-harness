@@ -1,9 +1,7 @@
-"""Normalize CFQ001 without calculating function length inside Harness."""
-
 import ast
 import re
 
-from ...finding import Finding
+from ..schema import ToolFinding
 from .schema import Flake8Finding
 
 MEASUREMENT_RE = re.compile(
@@ -27,7 +25,7 @@ def to_finding(
     diagnostic: Flake8Finding,
     max_lines: int,
     symbol: str,
-) -> Finding:
+) -> ToolFinding:
     measurement = MEASUREMENT_RE.fullmatch(diagnostic.message)
     if measurement is None:
         raise RuntimeError(f"Unrecognized CFQ001 message: {diagnostic.message}")
@@ -37,11 +35,15 @@ def to_finding(
         raise RuntimeError(f"CFQ001 function name does not match {symbol}")
     if reported_limit != max_lines or value <= max_lines:
         raise RuntimeError(f"Invalid CFQ001 measurement: {diagnostic.message}")
-    return Finding(
-        rule="CFQ001",
+    return ToolFinding(
+        tool="flake8",
+        comparison="metric",
+        limit=max_lines,
+        code="CFQ001",
         path=diagnostic.path,
         symbol=symbol,
         line=diagnostic.line,
+        column=diagnostic.column,
         value=value,
-        message=f"CFQ001 {symbol}: {diagnostic.message}",
+        message=diagnostic.message,
     )

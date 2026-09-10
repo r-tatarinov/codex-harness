@@ -1,5 +1,3 @@
-"""Run the package as a command-line checker."""
-
 import sys
 
 from .cli import main

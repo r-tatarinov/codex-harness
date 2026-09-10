@@ -1,5 +1,3 @@
-"""Parse Flake8's stable delimiter output."""
-
 from pathlib import Path
 
 from ..schema import ToolFinding

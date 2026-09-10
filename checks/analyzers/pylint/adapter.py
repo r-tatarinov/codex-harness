@@ -1,5 +1,3 @@
-"""Pylint adapter for the analyzer-neutral Harness interface."""
-
 from ...config.schema import ToolConfig
 from ..schema import SourceDocument, ToolFinding
 from .parsing import parse_output
@@ -21,6 +19,3 @@ class PylintAdapter:
             path = document.path.resolve()
             findings.extend(parse_output(run_check(document, config), str(path)))
         return findings
-
-
-ADAPTER = PylintAdapter()

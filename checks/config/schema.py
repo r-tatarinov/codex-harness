@@ -1,10 +1,4 @@
-"""Validated configuration types shared by Harness components."""
-
 from dataclasses import dataclass
-
-
-class ConfigurationError(ValueError):
-    """The Harness configuration is invalid or unsupported."""
 
 
 @dataclass(frozen=True)

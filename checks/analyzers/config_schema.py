@@ -1,13 +1,8 @@
-"""Schema used to describe one analyzer's configuration surface."""
-
 from collections.abc import Callable
 from dataclasses import dataclass
 
 from ..config.schema import ToolConfig
-
-
-def accept_configuration(config: ToolConfig) -> None:
-    """Default validator for analyzers without extra environment constraints."""
+from .base import AnalyzerConfigurationPolicy
 
 
 @dataclass(frozen=True)
@@ -29,4 +24,5 @@ class ToolConfigSpec:
 @dataclass(frozen=True)
 class AnalyzerConfiguration:
     spec: ToolConfigSpec
-    validate: Callable[[ToolConfig], None] = accept_configuration
+    validate: Callable[[ToolConfig], None]
+    environment_policy: AnalyzerConfigurationPolicy | None = None

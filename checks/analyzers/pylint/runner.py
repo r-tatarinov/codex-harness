@@ -1,5 +1,3 @@
-"""Execute Pylint against source supplied through standard input."""
-
 import subprocess
 import sys
 

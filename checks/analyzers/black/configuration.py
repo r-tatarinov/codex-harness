@@ -1,5 +1,3 @@
-"""Configuration schema supported by the Black adapter."""
-
 from ...config.schema import ToolConfig
 from ..config_schema import ToolConfigSpec
 from ..option_validation import validate_pattern, validate_types

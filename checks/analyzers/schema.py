@@ -1,5 +1,3 @@
-"""Stable types shared by all external analyzer adapters."""
-
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -32,12 +30,12 @@ class ToolFinding:
     limit: int | None = None
 
     @property
-    def occurrence_key(self) -> tuple[str, str, str]:
-        return self.tool, self.code, self.message
+    def occurrence_key(self) -> tuple[str, str, str, str]:
+        return self.path, self.tool, self.code, self.message
 
     @property
-    def metric_key(self) -> tuple[str, str, str | None]:
-        return self.tool, self.code, self.symbol
+    def metric_key(self) -> tuple[str, str, str, str | None]:
+        return self.path, self.tool, self.code, self.symbol
 
     def __post_init__(self) -> None:
         if self.line < 1 or self.column < 1:

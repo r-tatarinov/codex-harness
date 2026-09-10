@@ -20,7 +20,7 @@ dependencies = [
 
 [project.scripts]
 codex-harness-check = "codex_harness.checks.code_quality:main"
-codex-harness-ruff = "codex_harness.checks.python_ruff:main"
+codex-harness-ruff = "codex_harness.checks.analyzers.ruff.cli:main"
 codex-harness-pre-tool = "codex_harness.hooks.pre_tool:main"
 codex-harness-post-tool = "codex_harness.hooks.post_tool:main"
 
@@ -36,10 +36,7 @@ packages = [
     "codex_harness.checks.analyzers.ruff",
     "codex_harness.checks.code_quality",
     "codex_harness.checks.config",
-    "codex_harness.checks.function_length",
-    "codex_harness.checks.python_flake8",
-    "codex_harness.checks.python_ruff",
-    "codex_harness.checks.ruff_metrics",
+    "codex_harness.checks.snapshots",
     "codex_harness.hooks",
 ]
 
@@ -50,3 +47,7 @@ codex_harness = "src/codex_harness"
 
 [tool.setuptools.package-data]
 codex_harness = ["defaults/*.toml"]
+
+[tool.ruff.lint.extend-per-file-ignores]
+"hooks/pre_tool.py" = ["BLE001"]
+"hooks/post_tool.py" = ["BLE001"]

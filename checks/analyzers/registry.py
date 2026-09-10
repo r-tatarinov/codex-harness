@@ -1,19 +1,14 @@
-"""Runtime registry of built-in analyzer adapters."""
-
 from .base import AnalyzerAdapter
-from .black import ADAPTER as BLACK
-from .flake8 import ADAPTER as FLAKE8
-from .mypy import ADAPTER as MYPY
-from .pylint import ADAPTER as PYLINT
-from .ruff import ADAPTER as RUFF
+from .black.adapter import BlackAdapter
+from .flake8.adapter import Flake8Adapter
+from .mypy.adapter import MypyAdapter
+from .pylint.adapter import PylintAdapter
+from .ruff.adapter import RuffAdapter
 
-ADAPTERS: dict[str, AnalyzerAdapter] = {
-    adapter.name: adapter for adapter in (RUFF, FLAKE8, PYLINT, BLACK, MYPY)
-}
-
-
-def get_adapter(name: str) -> AnalyzerAdapter:
-    try:
-        return ADAPTERS[name]
-    except KeyError as exc:
-        raise ValueError(f"Unknown analyzer adapter: {name}") from exc
+BUILTIN_ANALYZERS: tuple[type[AnalyzerAdapter], ...] = (
+    RuffAdapter,
+    Flake8Adapter,
+    PylintAdapter,
+    BlackAdapter,
+    MypyAdapter,
+)

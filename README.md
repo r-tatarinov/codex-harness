@@ -97,20 +97,20 @@ Rule references: [`CFQ001`](https://github.com/best-doctor/flake8-functions), [`
 
 ```text
 codex-harness/
-├── hooks/                   # lifecycle control, baselines, scopes, and retry state
-├── checks/                  # analysis adapters, findings, and regression policy
-│   ├── config/              # schema, paths, loading, validation, and migration
-│   ├── code_quality/        # combined CLI and legacy public imports
-│   ├── analyzers/           # common interface, catalog, registry, and policy
-│   │   ├── ruff/            # adapter, runner, parsing, schema, and configuration
-│   │   ├── flake8/          # adapter, runner, parsing, schema, and configuration
-│   │   ├── pylint/          # adapter, runner, parsing, and configuration
-│   │   ├── black/           # adapter, check-only runner, and configuration
-│   │   └── mypy/            # adapter, runner, parsing, and configuration
-│   ├── function_length/     # CFQ001 finding normalization
-│   ├── python_flake8/       # compatibility re-exports for the former public API
-│   ├── python_ruff/         # compatibility re-exports and Ruff console entry point
-│   └── ruff_metrics/        # numeric Ruff finding normalization
+├── hooks/                   # hook responses, turn scopes, and retry state
+├── checks/                  # analyzer-neutral checking and snapshot lifecycle
+│   ├── config/              # schema, loading, validation, and migration
+│   ├── code_quality/        # combined quality-check CLI
+│   ├── analyzers/           # adapter contract, catalog, registry, and orchestration
+│   │   ├── ruff/            # Ruff diagnostics, metrics, and direct Ruff CLI
+│   │   ├── flake8/          # Flake8 diagnostics and CFQ001 metrics
+│   │   ├── pylint/          # Pylint integration
+│   │   ├── black/           # formatting checks
+│   │   └── mypy/            # type checking
+│   ├── snapshots/          # capture, persistence, and before/after verification
+│   ├── regression.py       # shared occurrence and numeric regression policy
+│   ├── storage.py          # atomic file persistence
+│   └── symbols.py          # qualified symbol identities
 ├── config/quality.toml      # obsolete repository file; pending cleanup
 ├── src/codex_harness/       # package metadata and built-in defaults
 │   └── defaults/quality.toml # authoritative packaged default configuration
@@ -135,15 +135,13 @@ If `quality.toml` is missing, it is created automatically from the built-in temp
 
 | Module | Responsibility |
 | --- | --- |
-| `config/` | Separates configuration schema, filesystem paths, packaged defaults, loading, validation, serialization, and legacy migration. `config/__init__.py` is the stable configuration API. |
-| `code_quality/` | Provides the combined CLI and preserves established quality-check imports. |
-| `analyzers/` | Defines normalized findings, shared regression comparison, configuration catalog, runtime adapter registry, and orchestration. |
-| `analyzers/<tool>/` | Owns one tool's configuration schema, subprocess runner, output parser, local diagnostic schema where needed, and Harness adapter. Each package exposes its stable API through `__init__.py`. |
-| `finding.py`, `symbols.py` | Provide normalized numeric findings and stable symbol identities across line movements. |
-| `comparison.py`, `regression.py` | Apply numeric before/after policy, including recovery from a syntactically invalid baseline. |
-| `ruff_regression.py` | Compares regular project-configured diagnostics by code, message, and occurrence count. |
-| `python_flake8/`, `python_ruff/` | Preserve the former public imports by re-exporting the corresponding analyzer packages; they contain no analyzer implementation. |
-| `function_length/`, `ruff_metrics/` | Adapt analyzer measurements to the common numeric regression model. |
+| `config/` | Loads and validates configuration, supplies defaults, and migrates legacy user settings. |
+| `code_quality/` | Provides the combined quality-check CLI. |
+| `analyzers/` | Defines normalized findings and the common adapter contract; runs the configured analyzers. |
+| `analyzers/<tool>/` | Owns the tool's configuration, execution, parsing, and finding normalization. |
+| `regression.py` | Compares occurrence counts and numeric metrics through one analyzer-neutral policy. Debt is scoped to its file and tool. |
+| `snapshots/` | Captures and consumes snapshots, obtains before/after source, and coordinates analysis with the regression policy. |
+| `storage.py`, `symbols.py` | Provide atomic persistence and qualified symbol identities, respectively. |
 
 Numeric findings and regular diagnostics are compared separately because their regression semantics differ: an exceeded numeric metric may improve without reaching its limit, while ordinary violations are tracked by occurrence count. Analyzer-specific normalization handles details such as reducing multiple `PLR1702` reports for one function to the maximum value supplied by Ruff.
 

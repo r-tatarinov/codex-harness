@@ -1,5 +1,3 @@
-"""Execute Ruff against source supplied through standard input."""
-
 import subprocess
 import sys
 from pathlib import Path
@@ -41,10 +39,3 @@ def run_check(
             result.stderr.strip() or f"Ruff failed with exit code {result.returncode}"
         )
     return parse_output(result.stdout, result.returncode, path)
-
-
-analyze_source = run_check
-
-
-def analyze_file(path: Path) -> list[RuffFinding]:
-    return analyze_source(path.read_text(encoding="utf-8"), path)

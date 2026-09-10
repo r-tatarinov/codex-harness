@@ -1,8 +1,6 @@
-"""Parse and normalize Pylint JSON2 diagnostics."""
-
 import json
 
-from ...config.schema import ConfigurationError
+from ...config.errors import ConfigurationError
 from ..schema import ToolFinding
 
 

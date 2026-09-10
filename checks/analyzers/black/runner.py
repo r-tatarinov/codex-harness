@@ -1,5 +1,3 @@
-"""Execute Black in read-only formatting-check mode."""
-
 import subprocess
 import sys
 

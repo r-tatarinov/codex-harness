@@ -97,20 +97,20 @@ Ruff, Flake8, Pylint, Black и MyPy реализуют единый интерф
 
 ```text
 codex-harness/
-├── hooks/                   # lifecycle-контроль, baseline, scope и retry state
-├── checks/                  # adapters, findings и regression policy
-│   ├── config/              # schema, paths, loading, validation и migration
-│   ├── code_quality/        # общий CLI и legacy public imports
-│   ├── analyzers/           # общий интерфейс, catalog, registry и policy
-│   │   ├── ruff/            # adapter, runner, parsing, schema и configuration
-│   │   ├── flake8/          # adapter, runner, parsing, schema и configuration
-│   │   ├── pylint/          # adapter, runner, parsing и configuration
-│   │   ├── black/           # adapter, check-only runner и configuration
-│   │   └── mypy/            # adapter, runner, parsing и configuration
-│   ├── function_length/     # нормализация finding CFQ001
-│   ├── python_flake8/       # compatibility re-exports прежнего public API
-│   ├── python_ruff/         # compatibility re-exports и Ruff console entry point
-│   └── ruff_metrics/        # нормализация числовых findings Ruff
+├── hooks/                   # ответы hooks, области хода и retry-state
+├── checks/                  # analyzer-neutral проверки и snapshot lifecycle
+│   ├── config/              # schema, загрузка, валидация и миграция
+│   ├── code_quality/        # общий CLI проверки качества
+│   ├── analyzers/           # контракт адаптеров, каталог, registry и orchestration
+│   │   ├── ruff/            # диагностика, метрики и отдельный Ruff CLI
+│   │   ├── flake8/          # диагностика Flake8 и метрика CFQ001
+│   │   ├── pylint/          # интеграция Pylint
+│   │   ├── black/           # проверка форматирования
+│   │   └── mypy/            # проверка типов
+│   ├── snapshots/          # сохранение, хранение и проверка before/after
+│   ├── regression.py       # общая policy для количества нарушений и метрик
+│   ├── storage.py          # атомарное сохранение файлов
+│   └── symbols.py          # квалифицированные имена символов
 ├── config/quality.toml      # устаревший файл репозитория; ожидает очистки
 ├── src/codex_harness/       # package metadata и встроенные defaults
 │   └── defaults/quality.toml # актуальный источник встроенной default-конфигурации
@@ -135,15 +135,13 @@ codex-harness/
 
 | Модуль | Ответственность |
 | --- | --- |
-| `config/` | Разделяет schema конфигурации, filesystem paths, встроенные defaults, loading, validation, serialization и legacy migration. `config/__init__.py` служит стабильным API конфигурации. |
-| `code_quality/` | Предоставляет общий CLI и сохраняет сложившиеся импорты quality checks. |
-| `analyzers/` | Определяет нормализованные findings, общее regression-сравнение, catalog конфигураций, runtime registry adapters и orchestration. |
-| `analyzers/<tool>/` | Содержит schema конфигурации конкретного tool, subprocess runner, parser output, локальную schema диагностик при необходимости и adapter Harness. Стабильный API каждого пакета доступен через `__init__.py`. |
-| `finding.py`, `symbols.py` | Задают нормализованные числовые findings и стабильные идентификаторы symbols при переносе строк. |
-| `comparison.py`, `regression.py` | Применяют числовую before/after policy, включая восстановление после синтаксически некорректного baseline. |
-| `ruff_regression.py` | Сравнивает обычные диагностики из конфигурации проекта по коду, сообщению и количеству повторений. |
-| `python_flake8/`, `python_ruff/` | Сохраняют прежние public imports через re-export соответствующих analyzer packages и не содержат реализацию analyzers. |
-| `function_length/`, `ruff_metrics/` | Адаптируют измерения analyzers к общей модели числовой регрессии. |
+| `config/` | Загружает и валидирует конфигурацию, предоставляет defaults и мигрирует прежние пользовательские настройки. |
+| `code_quality/` | Предоставляет общий CLI проверки качества. |
+| `analyzers/` | Определяет нормализованные findings и общий контракт адаптеров; запускает настроенные analyzers. |
+| `analyzers/<tool>/` | Владеет конфигурацией, запуском, parsing и нормализацией findings конкретного инструмента. |
+| `regression.py` | Сравнивает количество нарушений и числовые метрики через единую analyzer-neutral policy. Долг относится к своему файлу и инструменту. |
+| `snapshots/` | Сохраняет и потребляет snapshots, получает исходники before/after и координирует анализ с regression policy. |
+| `storage.py`, `symbols.py` | Обеспечивают атомарное сохранение и квалифицированные имена символов соответственно. |
 
 Числовые findings и обычные диагностики сравниваются отдельно, потому что их regression semantics различаются: превышенная числовая метрика может улучшиться, не достигнув лимита, а обычные нарушения отслеживаются по количеству повторений. Analyzer-specific normalization обрабатывает детали вроде сведения нескольких отчётов `PLR1702` для одной функции к максимальному значению, уже вычисленному Ruff.
 

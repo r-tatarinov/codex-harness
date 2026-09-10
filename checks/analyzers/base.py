@@ -1,5 +1,3 @@
-"""Interface implemented by every analyzer adapter."""
-
 from typing import Protocol
 
 from ..config.schema import ToolConfig
@@ -16,3 +14,7 @@ class AnalyzerAdapter(Protocol):
         *,
         baseline: bool,
     ) -> list[ToolFinding]: ...
+
+
+class AnalyzerConfigurationPolicy(Protocol):
+    def validate(self, config: ToolConfig) -> None: ...

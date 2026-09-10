@@ -1,5 +1,3 @@
-"""MyPy adapter for the analyzer-neutral Harness interface."""
-
 from ...config.schema import ToolConfig
 from ..schema import SourceDocument, ToolFinding
 from .parsing import parse_output
@@ -22,6 +20,3 @@ class MypyAdapter:
                 parse_output(run_check(document, config), str(document.path.resolve()))
             )
         return findings
-
-
-ADAPTER = MypyAdapter()

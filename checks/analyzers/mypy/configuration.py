@@ -1,5 +1,3 @@
-"""Configuration schema supported by the MyPy adapter."""
-
 from ...config.schema import ToolConfig
 from ..config_schema import ToolConfigSpec
 from ..option_validation import validate_choice, validate_pattern, validate_types

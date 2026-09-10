@@ -1,28 +1,15 @@
-"""Normalize Ruff diagnostics and numeric metrics for Harness."""
-
 import ast
 
 from ...config.schema import ToolConfig
 from ...symbols import build_symbol_index
 from ..schema import SourceDocument, ToolFinding
 from .configuration import METRIC_CODES, build_metric_options, build_regular_options
-from .normalization import collapse_nesting, find_symbol, to_finding
+from .normalization import collapse_nesting, find_symbol, ordinary_finding, to_finding
 from .runner import run_check
 
 
 class RuffAdapter:
     name = "ruff"
-
-    @staticmethod
-    def _ordinary(item: object) -> ToolFinding:
-        return ToolFinding(
-            tool="ruff",
-            code=item.code,
-            message=item.message,
-            path=item.path,
-            line=item.line,
-            column=item.column,
-        )
 
     def analyze(
         self,
@@ -41,7 +28,7 @@ class RuffAdapter:
                 cwd=document.working_directory,
             )
             findings.extend(
-                self._ordinary(item)
+                ordinary_finding(item)
                 for item in regular
                 if item.code not in METRIC_CODES
             )
@@ -69,23 +56,5 @@ class RuffAdapter:
                 to_finding(item, config.limits, find_symbol(item, functions, symbols))
                 for item in diagnostics
             )
-            for item in numeric:
-                findings.append(
-                    ToolFinding(
-                        tool="ruff",
-                        code=item.rule,
-                        message=item.message.removeprefix(
-                            f"{item.rule} {item.symbol}: "
-                        ),
-                        path=item.path,
-                        line=item.line,
-                        comparison="metric",
-                        symbol=item.symbol,
-                        value=item.value,
-                        limit=config.limits[item.rule],
-                    )
-                )
+            findings.extend(numeric)
         return findings
-
-
-ADAPTER = RuffAdapter()

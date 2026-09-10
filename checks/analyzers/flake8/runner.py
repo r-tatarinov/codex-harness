@@ -1,5 +1,3 @@
-"""Execute regular and metric Flake8 passes."""
-
 import subprocess
 import sys
 from pathlib import Path

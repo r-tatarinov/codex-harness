@@ -1,6 +1,4 @@
-"""Serialize the versioned Harness configuration as TOML."""
-
-from .schema import ConfigurationError
+from .errors import ConfigurationError
 
 
 def toml_value(value: object) -> str:

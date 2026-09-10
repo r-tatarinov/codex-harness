@@ -1,9 +1,7 @@
-"""Reusable validation primitives for analyzer option mappings."""
-
 import re
 from collections.abc import Iterable
 
-from ..config.schema import ConfigurationError
+from ..config.errors import ConfigurationError
 
 
 def validate_types(

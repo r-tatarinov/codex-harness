@@ -1,5 +1,3 @@
-"""Parse and normalize MyPy's line-delimited JSON diagnostics."""
-
 import json
 
 from ..schema import ToolFinding

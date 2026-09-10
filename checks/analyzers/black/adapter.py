@@ -1,5 +1,3 @@
-"""Black formatter-check adapter for Harness."""
-
 from ...config.schema import ToolConfig
 from ..schema import SourceDocument, ToolFinding
 from .runner import run_check
@@ -27,6 +25,3 @@ class BlackAdapter:
             for document in documents
             if run_check(document, config)
         ]
-
-
-ADAPTER = BlackAdapter()

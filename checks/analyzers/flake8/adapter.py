@@ -1,5 +1,3 @@
-"""Normalize regular Flake8 diagnostics and function-length metrics."""
-
 import ast
 
 from ...config.schema import ToolConfig
@@ -53,29 +51,8 @@ class Flake8Adapter:
                 timeout=config.timeout_seconds,
                 cwd=document.working_directory,
             )
-            for diagnostic in diagnostics:
-                item = to_finding(
-                    diagnostic,
-                    maximum,
-                    find_symbol(diagnostic, functions, symbols),
-                )
-                findings.append(
-                    ToolFinding(
-                        tool="flake8",
-                        code=item.rule,
-                        message=item.message.removeprefix(
-                            f"{item.rule} {item.symbol}: "
-                        ),
-                        path=item.path,
-                        line=item.line,
-                        column=diagnostic.column,
-                        comparison="metric",
-                        symbol=item.symbol,
-                        value=item.value,
-                        limit=maximum,
-                    )
-                )
+            findings.extend(
+                to_finding(item, maximum, find_symbol(item, functions, symbols))
+                for item in diagnostics
+            )
         return findings
-
-
-ADAPTER = Flake8Adapter()

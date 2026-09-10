@@ -1,10 +1,8 @@
-"""Map Ruff metric diagnostics to symbols and numeric findings."""
-
 import ast
 import re
 from collections.abc import Iterable
 
-from ...finding import Finding
+from ..schema import ToolFinding
 from .schema import RuffFinding
 
 MEASUREMENT_RE = re.compile(r"\((\d+) > (\d+)\)$")
@@ -31,7 +29,7 @@ def to_finding(
     diagnostic: RuffFinding,
     limits: dict[str, int],
     symbol: str,
-) -> Finding:
+) -> ToolFinding:
     if diagnostic.code not in limits or not isinstance(diagnostic.message, str):
         raise RuntimeError(f"Unexpected Ruff metric diagnostic: {diagnostic.code}")
     measurement = MEASUREMENT_RE.search(diagnostic.message)
@@ -40,28 +38,48 @@ def to_finding(
     value, limit = map(int, measurement.groups())
     if limit != limits[diagnostic.code] or value <= limit:
         raise RuntimeError(f"Invalid Ruff metric measurement: {diagnostic.message}")
-    return Finding(
-        rule=diagnostic.code,
+    return ToolFinding(
+        tool="ruff",
+        comparison="metric",
+        limit=limit,
+        code=diagnostic.code,
         path=diagnostic.path,
         symbol=symbol,
         line=diagnostic.line,
         value=value,
-        message=f"{diagnostic.code} {symbol}: {diagnostic.message}",
+        message=diagnostic.message,
     )
 
 
-def collapse_nesting(findings: Iterable[Finding]) -> list[Finding]:
-    others: list[Finding] = []
-    nesting: dict[str, Finding] = {}
+def collapse_nesting(findings: Iterable[ToolFinding]) -> list[ToolFinding]:
+    others: list[ToolFinding] = []
+    nesting: dict[tuple[str, str | None], ToolFinding] = {}
     for finding in findings:
-        if finding.rule != "PLR1702":
+        if finding.code != "PLR1702":
             others.append(finding)
             continue
-        previous = nesting.get(finding.symbol)
-        if previous is None or (finding.value, -finding.line) > (
-            previous.value,
-            -previous.line,
+        assert finding.value is not None
+        previous = nesting.get((finding.path, finding.symbol))
+        if (
+            previous is None
+            or previous.value is None
+            or (finding.value, -finding.line)
+            > (
+                previous.value,
+                -previous.line,
+            )
         ):
-            nesting[finding.symbol] = finding
+            nesting[finding.path, finding.symbol] = finding
     others.extend(sorted(nesting.values(), key=lambda item: item.line))
     return others
+
+
+def ordinary_finding(item: RuffFinding) -> ToolFinding:
+    return ToolFinding(
+        tool="ruff",
+        code=item.code,
+        message=item.message,
+        path=item.path,
+        line=item.line,
+        column=item.column,
+    )

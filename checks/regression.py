@@ -1,41 +1,33 @@
-import json
-from pathlib import Path
+from collections import Counter
+from collections.abc import Sequence
 
-from .code_quality import SourceSyntaxError, analyze_source
-from .comparison import find_regressions
-from .finding import Finding
+from .analyzers.schema import ToolFinding
 
 
-def _analyze_baseline(
-    path: Path,
-    file_state: dict,
-) -> list[Finding]:
-    if not file_state["exists"] or file_state["content"] is None:
-        return []
+class DefaultRegressionPolicy:
 
-    try:
-        return analyze_source(source=file_state["content"], path=path)
-    except SourceSyntaxError:
-        # No usable old metrics: apply the limits to the corrected source.
-        return []
-
-
-def check_snapshot(
-    snapshot_path: Path,
-) -> list[Finding]:
-    snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
-
-    regressions: list[Finding] = []
-
-    for raw_path, file_state in snapshot["files"].items():
-        path = Path(raw_path)
-        before = _analyze_baseline(path, file_state)
-        try:
-            source = path.read_text(encoding="utf-8")
-        except FileNotFoundError:
-            after = []
-        else:
-            after = analyze_source(source, path)
-        regressions.extend(find_regressions(before, after))
-
-    return regressions
+    def compare(
+        self, before: Sequence[ToolFinding], after: Sequence[ToolFinding]
+    ) -> list[ToolFinding]:
+        occurrences = Counter(
+            finding.occurrence_key
+            for finding in before
+            if finding.comparison == "occurrence"
+        )
+        metrics = {
+            finding.metric_key: finding.value
+            for finding in before
+            if finding.comparison == "metric"
+        }
+        regressions: list[ToolFinding] = []
+        for finding in after:
+            if finding.comparison == "metric":
+                previous = metrics.get(finding.metric_key)
+                assert finding.value is not None
+                if previous is None or finding.value > previous:
+                    regressions.append(finding)
+            elif occurrences[finding.occurrence_key] > 0:
+                occurrences[finding.occurrence_key] -= 1
+            else:
+                regressions.append(finding)
+        return regressions

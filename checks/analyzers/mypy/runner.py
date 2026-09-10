@@ -1,5 +1,3 @@
-"""Execute MyPy using a temporary shadow file for in-memory source."""
-
 import subprocess
 import sys
 import tempfile

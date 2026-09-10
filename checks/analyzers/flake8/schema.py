@@ -1,5 +1,3 @@
-"""Normalized shape of one Flake8 metric diagnostic."""
-
 from dataclasses import dataclass
 
 

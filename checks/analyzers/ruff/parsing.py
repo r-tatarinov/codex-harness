@@ -1,5 +1,3 @@
-"""Validate Ruff JSON and normalize diagnostic locations and messages."""
-
 import json
 from pathlib import Path
 
@@ -14,6 +12,9 @@ def parse_diagnostic(diagnostic: dict, path: Path) -> RuffFinding:
         column = diagnostic["location"]["column"]
     except (KeyError, TypeError) as exc:
         raise RuntimeError("Ruff returned a malformed diagnostic") from exc
+
+    if code is None and diagnostic.get("name") == "invalid-syntax":
+        code = "invalid-syntax"
     if not isinstance(code, str) or not isinstance(message, str):
         raise TypeError("Ruff diagnostic code and message must be strings")
     if type(row) is not int or type(column) is not int or row < 1 or column < 1:
