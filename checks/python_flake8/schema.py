@@ -1,12 +1,5 @@
-"""Normalized shape of one Flake8 diagnostic."""
+"""Compatibility import for the public Flake8 diagnostic type."""
 
-from dataclasses import dataclass
+from ..analyzers.flake8.schema import Flake8Finding
 
-
-@dataclass(frozen=True)
-class Flake8Finding:
-    code: str
-    message: str
-    path: str
-    line: int
-    column: int
+__all__ = ["Flake8Finding"]

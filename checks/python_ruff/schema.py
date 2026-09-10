@@ -1,16 +1,5 @@
-"""The normalized shape of one Ruff diagnostic."""
+"""Compatibility import for the public Ruff diagnostic type."""
 
-from dataclasses import dataclass
+from ..analyzers.ruff.schema import RuffFinding
 
-
-@dataclass(frozen=True)
-class RuffFinding:
-    code: str
-    message: str
-    path: str
-    line: int
-    column: int
-
-    @property
-    def key(self) -> tuple[str, str]:
-        return self.code, self.message
+__all__ = ["RuffFinding"]

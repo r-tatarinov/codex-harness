@@ -1,14 +1,8 @@
-"""Global Ruff metric limits and the command options enforcing them."""
+"""Compatibility API for the former Ruff metric configuration module."""
 
-from ..code_quality.config import load_ruff_settings
+from ..analyzers.ruff.configuration import METRIC_CODES, METRIC_SETTINGS, metric_options
+from ..config import load_ruff_settings
 
-METRIC_SETTINGS = {
-    "C901": ("mccabe", "max-complexity"),
-    "PLR0912": ("pylint", "max-branches"),
-    "PLR0915": ("pylint", "max-statements"),
-    "PLR1702": ("pylint", "max-nested-blocks"),
-}
-METRIC_CODES = frozenset(METRIC_SETTINGS)
 CONFIG_KEYS = {
     "C901": "max_complexity",
     "PLR0912": "max_branches",
@@ -23,16 +17,13 @@ def load_limits() -> dict[str, int]:
 
 
 def build_options(limits: dict[str, int]) -> tuple[str, ...]:
-    options = [
-        "--isolated",
-        "--ignore-noqa",
-        "--config",
-        "lint.preview=true",
-        "--config",
-        "lint.explicit-preview-rules=true",
-        "--select",
-        ",".join(METRIC_SETTINGS),
-    ]
-    for code, (plugin, setting) in METRIC_SETTINGS.items():
-        options.extend(("--config", f"lint.{plugin}.{setting}={limits[code]}"))
-    return tuple(options)
+    return metric_options(limits)
+
+
+__all__ = [
+    "CONFIG_KEYS",
+    "METRIC_CODES",
+    "METRIC_SETTINGS",
+    "build_options",
+    "load_limits",
+]

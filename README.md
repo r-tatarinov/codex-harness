@@ -65,7 +65,7 @@ Numeric metrics (`CFQ001`, `C901`, `PLR0912`, `PLR0915`, and `PLR1702`) are comp
 
 Regular analyzer diagnostics are compared by code, message, and occurrence count. An existing `F401` remains baseline; an additional `F401` is a regression. Syntax errors in changed source are treated as code failures. Infrastructure failures fail closed but do not consume the code-correction retry budget.
 
-## Rules, analyzers, and findings
+## Tools, analyzers, and findings
 
 The Harness defines which measurements are mandatory and how their findings are compared. External analyzers calculate the measurements:
 
@@ -83,6 +83,10 @@ Flake8 runs in an isolated Harness pass for `CFQ001`. The `flake8-functions` plu
 
 Ruff supplies the other four numeric metrics in an isolated pass with limits from `~/.codex/harness/config/quality.toml`; lint preview is enabled for that pass. A second Ruff pass discovers the target project's normal configuration and reports its other enabled rules, such as `F401` or `PLC0415`. Harness metrics are excluded from the second comparison to avoid duplicate findings. The target project's metric limits do not replace the Harness limits, and a regular manual Ruff run continues to use the project's own settings.
 
+Ruff, Flake8, Pylint, Black, and MyPy all implement one analyzer interface. The registry selects only tools whose `enabled` flag is true. Adapters own process invocation and tool-specific parsing; the orchestrator and lifecycle hooks see only normalized findings. This keeps external rule implementations in their original tools and allows another analyzer to be added without changing either hook.
+
+Pylint and MyPy diagnostics use the same occurrence-count regression policy as ordinary Ruff diagnostics. Black runs only in formatting-check mode and never changes source; a file that was already unformatted remains baseline, while a newly introduced formatting regression is blocked.
+
 Rule references: [`CFQ001`](https://github.com/best-doctor/flake8-functions), [`C901`](https://docs.astral.sh/ruff/rules/complex-structure/), [`PLR0912`](https://docs.astral.sh/ruff/rules/too-many-branches/), [`PLR0915`](https://docs.astral.sh/ruff/rules/too-many-statements/), [`PLR1702`](https://docs.astral.sh/ruff/rules/too-many-nested-blocks/).
 
 ## Harness architecture and project structure
@@ -91,10 +95,17 @@ Rule references: [`CFQ001`](https://github.com/best-doctor/flake8-functions), [`
 codex-harness/
 ├── hooks/                   # lifecycle control, baselines, scopes, and retry state
 ├── checks/                  # analysis adapters, findings, and regression policy
-│   ├── code_quality/        # orchestration, configuration, and combined CLI
+│   ├── config/              # schema, paths, loading, validation, and migration
+│   ├── code_quality/        # combined CLI and legacy public imports
+│   ├── analyzers/           # common interface, catalog, registry, and policy
+│   │   ├── ruff/            # adapter, runner, parsing, schema, and configuration
+│   │   ├── flake8/          # adapter, runner, parsing, schema, and configuration
+│   │   ├── pylint/          # adapter, runner, parsing, and configuration
+│   │   ├── black/           # adapter, check-only runner, and configuration
+│   │   └── mypy/            # adapter, runner, parsing, and configuration
 │   ├── function_length/     # CFQ001 finding normalization
-│   ├── python_flake8/       # Flake8 analyzer adapter
-│   ├── python_ruff/         # Ruff analyzer adapter
+│   ├── python_flake8/       # compatibility re-exports for the former public API
+│   ├── python_ruff/         # compatibility re-exports and Ruff console entry point
 │   └── ruff_metrics/        # numeric Ruff finding normalization
 ├── src/codex_harness/       # package metadata and built-in defaults
 ├── tests/                   # policy, adapter, configuration, and hook tests
@@ -109,19 +120,22 @@ After installation, executable code is loaded from the Python package and does n
 └── state/retry/<scope_hash>/
 ```
 
-If `quality.toml` is missing, it is created automatically from the built-in template. An existing file is not overwritten; parameters missing from it receive the current default values.
+If `quality.toml` is missing, it is created automatically from the built-in template. A legacy `[python.*]` configuration is migrated atomically to the versioned `[tools.*]` schema and retained as `quality.toml.v0.bak`. Versioned files are not rewritten; missing parameters receive current defaults.
 
 ### Responsibilities inside `checks/`
 
-`checks/` is the policy and analyzer boundary of the Harness. It converts tool-specific output into stable findings, then compares those findings without putting Ruff- or Flake8-specific behavior into the lifecycle hooks.
+`checks/` is the policy and analyzer boundary of the Harness. It converts tool-specific output into stable findings, then compares those findings without putting tool-specific behavior into the lifecycle hooks.
 
 | Module | Responsibility |
 | --- | --- |
-| `code_quality/` | Loads and validates Harness configuration, coordinates mandatory analysis, and provides the combined CLI. |
+| `config/` | Separates configuration schema, filesystem paths, packaged defaults, loading, validation, serialization, and legacy migration. `config/__init__.py` is the stable configuration API. |
+| `code_quality/` | Provides the combined CLI and preserves established quality-check imports. |
+| `analyzers/` | Defines normalized findings, shared regression comparison, configuration catalog, runtime adapter registry, and orchestration. |
+| `analyzers/<tool>/` | Owns one tool's configuration schema, subprocess runner, output parser, local diagnostic schema where needed, and Harness adapter. Each package exposes its stable API through `__init__.py`. |
 | `finding.py`, `symbols.py` | Provide normalized numeric findings and stable symbol identities across line movements. |
 | `comparison.py`, `regression.py` | Apply numeric before/after policy, including recovery from a syntactically invalid baseline. |
 | `ruff_regression.py` | Compares regular project-configured diagnostics by code, message, and occurrence count. |
-| `python_flake8/`, `python_ruff/` | Start external analyzers, validate their output, and normalize diagnostics. |
+| `python_flake8/`, `python_ruff/` | Preserve the former public imports by re-exporting the corresponding analyzer packages; they contain no analyzer implementation. |
 | `function_length/`, `ruff_metrics/` | Adapt analyzer measurements to the common numeric regression model. |
 
 Numeric findings and regular diagnostics are compared separately because their regression semantics differ: an exceeded numeric metric may improve without reaching its limit, while ordinary violations are tracked by occurrence count. Analyzer-specific normalization handles details such as reducing multiple `PLR1702` reports for one function to the maximum value supplied by Ruff.
@@ -143,14 +157,17 @@ Check Python:
 python3 --version
 ```
 
-After installation, check the toolchain:
+`pip install .` installs the complete analyzer toolchain. No separate linter installation is required. To inspect the installed versions:
 
 ```bash
 python3 -m flake8 --version
 python3 -m ruff --version
+python3 -m pylint --version
+python3 -m black --version
+python3 -m mypy --version
 ```
 
-The verified combination is Flake8 7.3.0, flake8-functions 0.1.0, and Ruff 0.16.6. Compatible version ranges are recorded in `pyproject.toml`. The Harness runs all tools through the same Python installation into which the package was installed.
+Compatible version ranges, including `flake8-functions`, are recorded as direct package dependencies in `pyproject.toml`. The Harness runs every tool through the same Python installation into which the package was installed.
 
 ## Installation
 
@@ -238,38 +255,87 @@ PreToolUse     1 installed / 1 active
 PostToolUse    1 installed / 1 active
 ```
 
-## Configuring rules
+## Configuring tools and rules
 
-All runtime limits are stored in:
+All tool switches, rules, limits, and supported native options are stored in:
 
 ```text
 ~/.codex/harness/config/quality.toml
 ```
 
-If the file is absent, the first hook creates it automatically. Current defaults:
+If the file is absent, the first hook creates it automatically. The essential default configuration is:
 
 ```toml
+schema_version = 1
+
 [verification]
 max_attempts = 3
 
-[python.functions]
-max_lines = 80
+[tools.ruff]
+enabled = true
+use_project_config = true
+timeout_seconds = 10
 
-[python.ruff]
-max_complexity = 10
-max_branches = 12
-max_statements = 50
-max_nested_blocks = 4
+[tools.ruff.rules]
+extend_select = ["PLC0415"]
+
+[tools.ruff.limits]
+C901 = 10
+PLR0912 = 12
+PLR0915 = 50
+PLR1702 = 4
+
+[tools.ruff.options]
+target_version = "py312"
+preview = true
+explicit_preview_rules = true
+
+[tools.flake8]
+enabled = true
+use_project_config = false
+timeout_seconds = 10
+plugins = ["flake8-functions"]
+
+[tools.flake8.rules]
+select = ["CFQ001"]
+
+[tools.flake8.limits]
+CFQ001 = 80
+
+[tools.pylint]
+enabled = false
+use_project_config = true
+timeout_seconds = 10
+
+[tools.pylint.rules]
+enable = []
+disable = []
+
+[tools.black]
+enabled = false
+use_project_config = true
+timeout_seconds = 10
+
+[tools.mypy]
+enabled = false
+use_project_config = true
+timeout_seconds = 10
+
+[tools.mypy.rules]
+enable_error_code = []
+disable_error_code = []
 ```
 
-To change the `CFQ001` limit, edit:
+Set a tool's `enabled` value to activate or deactivate it. To change the `CFQ001` limit, edit:
 
 ```toml
-[python.functions]
-max_lines = 120
+[tools.flake8.limits]
+CFQ001 = 120
 ```
 
-All values must be integers `>= 1`. An existing file is not overwritten when the Harness is updated; new missing keys use the built-in defaults. This file currently configures retry policy and Python metric limits. Architectural and dependency checkers are not configured here because they are not implemented yet.
+With `use_project_config = true`, the analyzer discovers its normal project configuration and Harness `rules`, `limits`, and `options` take precedence. With `false`, the adapter uses an isolated tool configuration. Unknown tools, rules, plugins, options, incorrect types, and invalid positive limits fail closed with a configuration path in the error. Harness does not reimplement any external rule.
+
+Ruff and Flake8 accept `select`/`extend_select`/`ignore` rule selectors, Pylint accepts `enable`/`disable`, and MyPy accepts `enable_error_code`/`disable_error_code`. Supported `options` cover Python targets, line and complexity limits, formatter modes, and the common MyPy strictness switches; reserved process/output/write options remain controlled by Harness.
 
 ## Checking a file manually
 
@@ -291,9 +357,9 @@ If limits are violated:
 ```text
 CODE QUALITY CHECK FAILED
 
-- CFQ001 PaymentService.process: Function process has length 81 that exceeds max allowed length 80
-- PLR0915 PaymentService.process: Too many statements (63 > 50)
-- C901 PaymentService.process: `process` is too complex (18 > 10)
+- payment.py:10:1: [flake8] CFQ001 Function process has length 81 that exceeds max allowed length 80
+- payment.py:10:1: [ruff] PLR0915 Too many statements (63 > 50)
+- payment.py:10:1: [ruff] C901 `process` is too complex (18 > 10)
 ```
 
 The Ruff analyzer adapter can also be run separately:
@@ -309,7 +375,7 @@ This command uses the target project's settings. For all global Harness constrai
 From the repository root:
 
 ```bash
-ruff check .
+codex-harness-check checks hooks tests
 ruff format --check .
 python3 -m unittest discover -v
 ```

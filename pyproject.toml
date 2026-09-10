@@ -9,8 +9,11 @@ description = "Deterministic code-quality hooks for Codex"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "black>=26,<27",
     "flake8>=7.3,<8",
     "flake8-functions>=0.1,<0.2",
+    "mypy>=2,<3",
+    "pylint>=4,<5",
     "ruff>=0.16,<0.17",
 ]
 
@@ -24,7 +27,14 @@ codex-harness-post-tool = "codex_harness.hooks.post_tool:main"
 packages = [
     "codex_harness",
     "codex_harness.checks",
+    "codex_harness.checks.analyzers",
+    "codex_harness.checks.analyzers.black",
+    "codex_harness.checks.analyzers.flake8",
+    "codex_harness.checks.analyzers.mypy",
+    "codex_harness.checks.analyzers.pylint",
+    "codex_harness.checks.analyzers.ruff",
     "codex_harness.checks.code_quality",
+    "codex_harness.checks.config",
     "codex_harness.checks.function_length",
     "codex_harness.checks.python_flake8",
     "codex_harness.checks.python_ruff",
@@ -39,19 +49,3 @@ codex_harness = "src/codex_harness"
 
 [tool.setuptools.package-data]
 codex_harness = ["defaults/*.toml"]
-
-[tool.ruff]
-target-version = "py312"
-
-[tool.ruff.lint]
-extend-select = ["C901", "PLC0415", "PLR0912", "PLR0915", "PLR1702"]
-preview = true
-explicit-preview-rules = true
-
-[tool.ruff.lint.mccabe]
-max-complexity = 10
-
-[tool.ruff.lint.pylint]
-max-branches = 12
-max-nested-blocks = 4
-max-statements = 50

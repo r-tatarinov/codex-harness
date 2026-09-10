@@ -65,7 +65,7 @@ Harness оценивает изменение Codex, а не весь накоп
 
 Обычные диагностики analyzers сравниваются по коду, тексту сообщения и количеству повторений. Существующий `F401` остаётся частью baseline; дополнительный `F401` считается регрессией. Синтаксические ошибки в изменённом source считаются code failure. Infrastructure failure закрывает проход, но не расходует retry budget исправления кода.
 
-## Правила, analyzers и findings
+## Tools, analyzers и findings
 
 Harness определяет, какие измерения обязательны и как сравнивать их findings. Значения вычисляют внешние analyzers:
 
@@ -83,6 +83,10 @@ Flake8 запускается в изолированном проходе Harne
 
 Ruff возвращает остальные четыре числовые метрики в изолированном проходе с лимитами из `~/.codex/harness/config/quality.toml`; для этого прохода включён lint preview. Второй проход Ruff находит обычную конфигурацию целевого проекта и возвращает остальные включённые правила, например `F401` или `PLC0415`. Метрики Harness исключены из второго сравнения, чтобы не дублировать findings. Лимиты метрик целевого проекта не заменяют лимиты Harness, а обычный ручной запуск Ruff продолжает использовать настройки проекта.
 
+Ruff, Flake8, Pylint, Black и MyPy реализуют единый интерфейс analyzer. Registry выбирает только tools с `enabled = true`. Adapters отвечают за запуск процессов и разбор tool-specific output; orchestrator и lifecycle hooks работают только с нормализованными findings. Поэтому новый analyzer можно добавить без изменения hooks, а реализации внешних правил остаются в исходных tools.
+
+Диагностики Pylint и MyPy используют ту же regression-policy по количеству вхождений, что и обычные диагностики Ruff. Black работает только в режиме проверки форматирования и никогда не изменяет source: уже неформатированный файл остаётся baseline, а новая formatting regression блокируется.
+
 Ссылки на правила: [`CFQ001`](https://github.com/best-doctor/flake8-functions), [`C901`](https://docs.astral.sh/ruff/rules/complex-structure/), [`PLR0912`](https://docs.astral.sh/ruff/rules/too-many-branches/), [`PLR0915`](https://docs.astral.sh/ruff/rules/too-many-statements/), [`PLR1702`](https://docs.astral.sh/ruff/rules/too-many-nested-blocks/).
 
 ## Архитектура Harness и структура проекта
@@ -91,10 +95,17 @@ Ruff возвращает остальные четыре числовые ме�
 codex-harness/
 ├── hooks/                   # lifecycle-контроль, baseline, scope и retry state
 ├── checks/                  # adapters, findings и regression policy
-│   ├── code_quality/        # orchestration, configuration и общий CLI
+│   ├── config/              # schema, paths, loading, validation и migration
+│   ├── code_quality/        # общий CLI и legacy public imports
+│   ├── analyzers/           # общий интерфейс, catalog, registry и policy
+│   │   ├── ruff/            # adapter, runner, parsing, schema и configuration
+│   │   ├── flake8/          # adapter, runner, parsing, schema и configuration
+│   │   ├── pylint/          # adapter, runner, parsing и configuration
+│   │   ├── black/           # adapter, check-only runner и configuration
+│   │   └── mypy/            # adapter, runner, parsing и configuration
 │   ├── function_length/     # нормализация finding CFQ001
-│   ├── python_flake8/       # adapter analyzer Flake8
-│   ├── python_ruff/         # adapter analyzer Ruff
+│   ├── python_flake8/       # compatibility re-exports прежнего public API
+│   ├── python_ruff/         # compatibility re-exports и Ruff console entry point
 │   └── ruff_metrics/        # нормализация числовых findings Ruff
 ├── src/codex_harness/       # package metadata и встроенные defaults
 ├── tests/                   # тесты policy, adapters, configuration и hooks
@@ -109,19 +120,22 @@ codex-harness/
 └── state/retry/<scope_hash>/
 ```
 
-Отсутствующий `quality.toml` создаётся автоматически из встроенного шаблона. Существующий файл не перезаписывается; отсутствующие в нём параметры получают текущие значения по умолчанию.
+Отсутствующий `quality.toml` создаётся автоматически из встроенного шаблона. Legacy-конфигурация `[python.*]` атомарно мигрирует в версионированную схему `[tools.*]`, а исходник сохраняется как `quality.toml.v0.bak`. Версионированные файлы не переписываются; отсутствующие параметры получают текущие defaults.
 
 ### Ответственность внутри `checks/`
 
-`checks/` — граница policy и analyzers в Harness. Она преобразует tool-specific output в стабильные findings и сравнивает их, не перенося специфику Ruff или Flake8 в lifecycle hooks.
+`checks/` — граница policy и analyzers в Harness. Она преобразует tool-specific output в стабильные findings и сравнивает их, не перенося специфику конкретных tools в lifecycle hooks.
 
 | Модуль | Ответственность |
 | --- | --- |
-| `code_quality/` | Загружает и проверяет конфигурацию Harness, координирует обязательный анализ и предоставляет общий CLI. |
+| `config/` | Разделяет schema конфигурации, filesystem paths, встроенные defaults, loading, validation, serialization и legacy migration. `config/__init__.py` служит стабильным API конфигурации. |
+| `code_quality/` | Предоставляет общий CLI и сохраняет сложившиеся импорты quality checks. |
+| `analyzers/` | Определяет нормализованные findings, общее regression-сравнение, catalog конфигураций, runtime registry adapters и orchestration. |
+| `analyzers/<tool>/` | Содержит schema конфигурации конкретного tool, subprocess runner, parser output, локальную schema диагностик при необходимости и adapter Harness. Стабильный API каждого пакета доступен через `__init__.py`. |
 | `finding.py`, `symbols.py` | Задают нормализованные числовые findings и стабильные идентификаторы symbols при переносе строк. |
 | `comparison.py`, `regression.py` | Применяют числовую before/after policy, включая восстановление после синтаксически некорректного baseline. |
 | `ruff_regression.py` | Сравнивает обычные диагностики из конфигурации проекта по коду, сообщению и количеству повторений. |
-| `python_flake8/`, `python_ruff/` | Запускают внешние analyzers, проверяют их output и нормализуют диагностики. |
+| `python_flake8/`, `python_ruff/` | Сохраняют прежние public imports через re-export соответствующих analyzer packages и не содержат реализацию analyzers. |
 | `function_length/`, `ruff_metrics/` | Адаптируют измерения analyzers к общей модели числовой регрессии. |
 
 Числовые findings и обычные диагностики сравниваются отдельно, потому что их regression semantics различаются: превышенная числовая метрика может улучшиться, не достигнув лимита, а обычные нарушения отслеживаются по количеству повторений. Analyzer-specific normalization обрабатывает детали вроде сведения нескольких отчётов `PLR1702` для одной функции к максимальному значению, уже вычисленному Ruff.
@@ -143,14 +157,17 @@ Codex CLI с поддержкой lifecycle hooks
 python3 --version
 ```
 
-После установки проверить toolchain:
+`pip install .` устанавливает полный analyzer toolchain. Отдельно устанавливать линтеры не требуется. Посмотреть установленные версии можно командами:
 
 ```bash
 python3 -m flake8 --version
 python3 -m ruff --version
+python3 -m pylint --version
+python3 -m black --version
+python3 -m mypy --version
 ```
 
-Проверенная комбинация — Flake8 7.3.0, flake8-functions 0.1.0 и Ruff 0.16.6. Совместимые диапазоны записаны в `pyproject.toml`. Harness запускает все инструменты через тот же Python, в который установлен пакет.
+Совместимые диапазоны версий, включая `flake8-functions`, записаны как прямые зависимости пакета в `pyproject.toml`. Harness запускает все tools через тот же Python, в который установлен пакет.
 
 ## Установка
 
@@ -238,38 +255,87 @@ PreToolUse     1 installed / 1 active
 PostToolUse    1 installed / 1 active
 ```
 
-## Настройка правил
+## Настройка tools и правил
 
-Все runtime-лимиты находятся в:
+Все переключатели tools, правила, лимиты и поддерживаемые нативные options находятся в:
 
 ```text
 ~/.codex/harness/config/quality.toml
 ```
 
-При отсутствии файла первый hook создаёт его автоматически. Текущие defaults:
+При отсутствии файла первый hook создаёт его автоматически. Основная часть default-конфигурации:
 
 ```toml
+schema_version = 1
+
 [verification]
 max_attempts = 3
 
-[python.functions]
-max_lines = 80
+[tools.ruff]
+enabled = true
+use_project_config = true
+timeout_seconds = 10
 
-[python.ruff]
-max_complexity = 10
-max_branches = 12
-max_statements = 50
-max_nested_blocks = 4
+[tools.ruff.rules]
+extend_select = ["PLC0415"]
+
+[tools.ruff.limits]
+C901 = 10
+PLR0912 = 12
+PLR0915 = 50
+PLR1702 = 4
+
+[tools.ruff.options]
+target_version = "py312"
+preview = true
+explicit_preview_rules = true
+
+[tools.flake8]
+enabled = true
+use_project_config = false
+timeout_seconds = 10
+plugins = ["flake8-functions"]
+
+[tools.flake8.rules]
+select = ["CFQ001"]
+
+[tools.flake8.limits]
+CFQ001 = 80
+
+[tools.pylint]
+enabled = false
+use_project_config = true
+timeout_seconds = 10
+
+[tools.pylint.rules]
+enable = []
+disable = []
+
+[tools.black]
+enabled = false
+use_project_config = true
+timeout_seconds = 10
+
+[tools.mypy]
+enabled = false
+use_project_config = true
+timeout_seconds = 10
+
+[tools.mypy.rules]
+enable_error_code = []
+disable_error_code = []
 ```
 
-Чтобы изменить лимит `CFQ001`, отредактировать:
+Для включения или отключения tool измените его `enabled`. Чтобы изменить лимит `CFQ001`, отредактируйте:
 
 ```toml
-[python.functions]
-max_lines = 120
+[tools.flake8.limits]
+CFQ001 = 120
 ```
 
-Все значения должны быть целыми числами `>= 1`. Существующий файл не переписывается при обновлении Harness; новые отсутствующие ключи используют встроенные defaults. Сейчас этот файл настраивает retry policy и лимиты Python-метрик. Архитектурные проверки и проверки зависимостей здесь не настраиваются, поскольку ещё не реализованы.
+При `use_project_config = true` analyzer находит обычный конфиг проекта, после чего `rules`, `limits` и `options` Harness имеют приоритет. При `false` adapter использует изолированную конфигурацию tool. Неизвестные tools, правила, plugins, options, неверные типы и некорректные положительные лимиты дают fail-closed ошибку с путём параметра. Harness не реализует внешние правила повторно.
+
+Ruff и Flake8 принимают selectors `select`/`extend_select`/`ignore`, Pylint — `enable`/`disable`, MyPy — `enable_error_code`/`disable_error_code`. Поддерживаемые `options` охватывают Python targets, line/complexity limits, режимы formatter и основные MyPy strictness switches; служебные process/output/write options остаются под контролем Harness.
 
 ## Ручная проверка файла
 
@@ -291,9 +357,9 @@ codex-harness-check \
 ```text
 CODE QUALITY CHECK FAILED
 
-- CFQ001 PaymentService.process: Function process has length 81 that exceeds max allowed length 80
-- PLR0915 PaymentService.process: Too many statements (63 > 50)
-- C901 PaymentService.process: `process` is too complex (18 > 10)
+- payment.py:10:1: [flake8] CFQ001 Function process has length 81 that exceeds max allowed length 80
+- payment.py:10:1: [ruff] PLR0915 Too many statements (63 > 50)
+- payment.py:10:1: [ruff] C901 `process` is too complex (18 > 10)
 ```
 
 Adapter analyzer Ruff также можно запустить отдельно:
@@ -309,7 +375,7 @@ codex-harness-ruff path/to/file.py
 Из корня репозитория:
 
 ```bash
-ruff check .
+codex-harness-check checks hooks tests
 ruff format --check .
 python3 -m unittest discover -v
 ```

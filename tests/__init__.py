@@ -1,1 +1,0 @@
-"""Codex Harness test suite."""

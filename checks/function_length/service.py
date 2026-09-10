@@ -3,9 +3,9 @@
 import ast
 from pathlib import Path
 
+from ..analyzers.flake8.normalization import find_symbol, to_finding
+from ..analyzers.flake8.runner import run_metric_check
 from ..finding import Finding
-from ..python_flake8 import run_check
-from .normalization import find_symbol, to_finding
 
 
 def check(
@@ -20,7 +20,7 @@ def check(
         for node in ast.walk(tree)
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
     ]
-    diagnostics = run_check(source, path, max_lines)
+    diagnostics = run_metric_check(source, path, max_lines)
     return [
         to_finding(item, max_lines, find_symbol(item, functions, symbols))
         for item in diagnostics

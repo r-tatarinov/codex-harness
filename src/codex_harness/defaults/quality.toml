@@ -1,11 +1,60 @@
+schema_version = 1
+
 [verification]
 max_attempts = 3
 
-[python.functions]
-max_lines = 80
+[tools.ruff]
+enabled = true
+use_project_config = true
+timeout_seconds = 10
 
-[python.ruff]
-max_complexity = 10
-max_branches = 12
-max_statements = 50
-max_nested_blocks = 4
+[tools.ruff.rules]
+extend_select = ["PLC0415"]
+ignore = []
+
+[tools.ruff.limits]
+C901 = 10
+PLR0912 = 12
+PLR0915 = 50
+PLR1702 = 4
+
+[tools.ruff.options]
+target_version = "py312"
+preview = true
+explicit_preview_rules = true
+
+[tools.flake8]
+enabled = true
+use_project_config = false
+timeout_seconds = 10
+plugins = ["flake8-functions"]
+
+[tools.flake8.rules]
+select = ["CFQ001"]
+ignore = []
+
+[tools.flake8.limits]
+CFQ001 = 80
+
+[tools.pylint]
+enabled = false
+use_project_config = true
+timeout_seconds = 10
+
+[tools.pylint.rules]
+enable = []
+disable = []
+
+[tools.black]
+enabled = false
+use_project_config = true
+timeout_seconds = 10
+
+[tools.mypy]
+enabled = false
+use_project_config = true
+timeout_seconds = 10
+
+[tools.mypy.rules]
+enable_error_code = []
+disable_error_code = []

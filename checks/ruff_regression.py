@@ -5,7 +5,8 @@ from collections import Counter
 from collections.abc import Iterable
 from pathlib import Path
 
-from .python_ruff import RuffFinding, analyze_source
+from .analyzers.ruff.runner import analyze_source
+from .analyzers.ruff.schema import RuffFinding
 from .ruff_metrics import METRIC_CODES
 
 

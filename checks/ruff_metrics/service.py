@@ -3,10 +3,11 @@
 import ast
 from pathlib import Path
 
+from ..analyzers.ruff.configuration import metric_options
+from ..analyzers.ruff.normalization import collapse_nesting, find_symbol, to_finding
+from ..analyzers.ruff.runner import run_check
 from ..finding import Finding
-from ..python_ruff import run_check
-from .config import build_options, load_limits
-from .normalization import collapse_nesting, find_symbol, to_finding
+from .config import load_limits
 
 
 def check(
@@ -22,7 +23,7 @@ def check(
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
     ]
     functions.sort(key=lambda node: (node.lineno, node.col_offset), reverse=True)
-    diagnostics = run_check(source, path, build_options(limits))
+    diagnostics = run_check(source, path, metric_options(limits))
     findings = (
         to_finding(item, limits, find_symbol(item, functions, symbols))
         for item in diagnostics

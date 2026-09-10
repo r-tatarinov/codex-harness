@@ -4,9 +4,9 @@ import json
 import sys
 from pathlib import Path
 
-from ..checks.code_quality import HARNESS_ROOT, SourceSyntaxError, load_max_attempts
-from ..checks.regression import check_snapshot as check_quality_snapshot
-from ..checks.ruff_regression import check_snapshot as check_ruff_snapshot
+from ..checks.analyzers.orchestrator import check_snapshot
+from ..checks.analyzers.schema import ToolFinding
+from ..checks.config import HARNESS_ROOT, load_settings
 from .retry_state import (
     atomic_write,
     consume_snapshot,
@@ -21,43 +21,22 @@ from .retry_state import (
 STATE_DIR = HARNESS_ROOT / "state"
 
 
-def build_quality_lines(regressions: list) -> list[str]:
-    lines: list[str] = []
-
-    for finding in regressions:
-        lines.append(f"- {finding.path}:{finding.line}: {finding.message}")
-
-    return lines
-
-
-def build_ruff_lines(regressions: list) -> list[str]:
-    lines: list[str] = []
-
-    for finding in regressions:
-        lines.append(
-            f"- {finding.path}:{finding.line}:{finding.column}: "
-            f"{finding.code} {finding.message}"
-        )
-
-    return lines
-
-
-def build_reason(
-    quality_regressions: list,
-    ruff_regressions: list,
-) -> str:
+def build_reason(regressions: list[ToolFinding]) -> str:
     lines = ["Code quality regression detected."]
-
-    if quality_regressions:
+    grouped: dict[str, list[ToolFinding]] = {}
+    for finding in regressions:
+        grouped.setdefault(finding.tool, []).append(finding)
+    for tool, findings in grouped.items():
         lines.append("")
-        lines.append("Quality rules:")
-        lines.extend(build_quality_lines(quality_regressions))
-
-    if ruff_regressions:
-        lines.append("")
-        lines.append("Ruff:")
-        lines.extend(build_ruff_lines(ruff_regressions))
-
+        lines.append(f"{tool}:")
+        for finding in findings:
+            suffix = ""
+            if finding.comparison == "metric":
+                suffix = f" [{finding.symbol}: {finding.value} > {finding.limit}]"
+            lines.append(
+                f"- {finding.path}:{finding.line}:{finding.column}: "
+                f"{finding.code} {finding.message}{suffix}"
+            )
     return "\n".join(lines)
 
 
@@ -80,13 +59,9 @@ def emit_block(reason: str) -> None:
 
 
 def verify_snapshot(path: Path) -> str | None:
-    try:
-        quality_regressions = check_quality_snapshot(path)
-    except SourceSyntaxError as exc:
-        return str(exc)
-    ruff_regressions = check_ruff_snapshot(path)
-    if quality_regressions or ruff_regressions:
-        return build_reason(quality_regressions, ruff_regressions)
+    regressions = check_snapshot(path)
+    if regressions:
+        return build_reason(regressions)
     return None
 
 
@@ -117,7 +92,10 @@ def retain_changed_files(path: Path, event: dict) -> bool:
 
 
 def process_patch(event: dict) -> None:
-    maximum = load_max_attempts()
+    settings = load_settings()
+    maximum = settings.max_attempts
+    if not settings.enabled_tools:
+        return
     scope = scope_path(STATE_DIR, event)
     path = snapshot_path(scope, event)
     with locked_scope(scope):

@@ -3,43 +3,27 @@
 import sys
 from pathlib import Path
 
-from ..finding import Finding
-from .service import analyze_file
+from ..analyzers.orchestrator import analyze_files
+from ..analyzers.schema import ToolFinding
 
 
-def print_findings(findings: list[Finding]) -> None:
+def print_findings(findings: list[ToolFinding]) -> None:
     print("CODE QUALITY CHECK FAILED")
 
     for finding in findings:
-        print(f"- {finding.path}:{finding.line}: {finding.message}")
+        print(
+            f"- {finding.path}:{finding.line}:{finding.column}: "
+            f"[{finding.tool}] {finding.code} {finding.message}"
+        )
 
 
 def main() -> int:
-    findings: list[Finding] = []
-
-    for path in map(Path, sys.argv[1:]):
-        if path.suffix != ".py" or not path.is_file():
-            continue
-
-        try:
-            findings.extend(
-                analyze_file(
-                    path=path,
-                )
-            )
-        except (
-            OSError,
-            SyntaxError,
-            TypeError,
-            ValueError,
-            KeyError,
-            RuntimeError,
-        ) as exc:
-            print(
-                f"{path}: cannot analyze file: {exc}",
-                file=sys.stderr,
-            )
-            return 1
+    paths = list(map(Path, sys.argv[1:]))
+    try:
+        findings = analyze_files(paths)
+    except (OSError, SyntaxError, TypeError, ValueError, KeyError, RuntimeError) as exc:
+        print(f"cannot analyze files: {exc}", file=sys.stderr)
+        return 1
 
     if not findings:
         return 0

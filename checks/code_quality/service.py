@@ -3,11 +3,11 @@
 import ast
 from pathlib import Path
 
+from ..config import load_max_function_lines
 from ..finding import Finding
 from ..function_length import check as check_function_length
 from ..ruff_metrics import check as check_ruff_metrics
 from ..symbols import build_symbol_index
-from .config import load_max_function_lines
 
 
 class SourceSyntaxError(ValueError):

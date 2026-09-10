@@ -5,7 +5,7 @@ import re
 import sys
 from pathlib import Path
 
-from ..checks.code_quality import HARNESS_ROOT, load_max_attempts
+from ..checks.config import HARNESS_ROOT, load_settings
 from .retry_state import (
     atomic_write,
     failure_reason,
@@ -66,7 +66,10 @@ def emit_deny(reason: str) -> None:
 
 
 def prepare_patch(event: dict) -> None:
-    maximum = load_max_attempts()
+    settings = load_settings()
+    maximum = settings.max_attempts
+    if not settings.enabled_tools:
+        return
     scope = scope_path(STATE_DIR, event)
     path = snapshot_path(scope, event)
     with locked_scope(scope):
