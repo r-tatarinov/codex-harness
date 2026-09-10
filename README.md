@@ -516,6 +516,13 @@ Other languages
 
 The project's main goal is to move code quality control out of the model's probabilistic behavior and into a separate deterministic layer around the agent.
 
+## License
+
+Licensed under the Apache License 2.0.
+See [LICENSE](LICENSE) for details.
+
+Copyright © 2026 Roman Tatarinov.
+
 ## Documentation maintenance
 
 When changing the documentation, update `README.md` and `README.ru.md` together, keeping the content and structure of both language versions semantically equivalent.

@@ -7,6 +7,7 @@ name = "codex-harness"
 version = "0.1.0"
 description = "Deterministic code-quality hooks for Codex"
 readme = "README.md"
+license = "Apache-2.0"
 requires-python = ">=3.12"
 dependencies = [
     "black>=26,<27",
