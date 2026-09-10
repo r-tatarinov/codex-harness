@@ -1,21 +1,23 @@
+**English** | [Русский](README.ru.md)
+
 # Codex Harness
 
-Локальный Harness для Codex, который добавляет детерминированные проверки качества кода поверх работы агента.
+A local harness for Codex that adds deterministic code quality checks on top of the agent's work.
 
-Основная идея — не полагаться только на правила в промптах, skills или инструкциях модели.
+The core idea is not to rely only on rules in prompts, skills, or model instructions.
 
-Codex может сгенерировать рабочий код, который при этом постепенно становится сложнее: разрастаются методы, увеличивается вложенность, появляется лишнее ветвление, нарушаются правила линтера.
+Codex can generate working code that nevertheless becomes progressively harder to maintain: methods grow, nesting increases, unnecessary branching appears, and linter rules are violated.
 
-Harness добавляет отдельный технический слой, который проверяет изменения после действий агента и возвращает проблему обратно в Codex.
+The Harness adds a separate technical layer that checks changes after the agent's actions and reports problems back to Codex.
 
-## Как это работает
+## How it works
 
-Сейчас Harness подключается к Codex через два lifecycle hook:
+The Harness currently integrates with Codex through two lifecycle hooks:
 
-- `PreToolUse` — выполняется до изменения кода;
-- `PostToolUse` — выполняется после изменения кода.
+- `PreToolUse` — runs before code is changed;
+- `PostToolUse` — runs after code is changed.
 
-Текущий flow:
+Current flow:
 
 ```text
 Codex
@@ -24,7 +26,7 @@ Codex
   v
 PreToolUse
   |
-  | сохраняется состояние Python-файлов до изменения
+  | the state of Python files before the change is saved
   v
 apply_patch
   |
@@ -32,101 +34,101 @@ apply_patch
 PostToolUse
   |
   +-- Quality rules
-  |     +-- длина функции (flake8-functions CFQ001)
-  |     +-- количество statements (Ruff PLR0915)
-  |     +-- вложенность (Ruff PLR1702)
-  |     +-- количество ветвлений (Ruff PLR0912)
-  |     +-- сложность функции (Ruff C901)
+  |     +-- function length (flake8-functions CFQ001)
+  |     +-- number of statements (Ruff PLR0915)
+  |     +-- nesting (Ruff PLR1702)
+  |     +-- number of branches (Ruff PLR0912)
+  |     +-- function complexity (Ruff C901)
   |
-  +-- остальные правила Ruff из настроек целевого проекта
+  +-- other Ruff rules from the target project's configuration
   |
   v
-сравнение состояния ДО / ПОСЛЕ
+compare BEFORE / AFTER states
   |
-  +-- ухудшений нет -> продолжаем
+  +-- no regression -> continue
   |
-  +-- появился новый плохой код -> Codex получает ошибку
+  +-- new bad code appeared -> Codex receives an error
 ```
 
-## Почему проверяется именно регрессия
+## Why only regressions are checked
 
-Harness не заставляет агента исправлять весь старый технический долг проекта.
+The Harness does not force the agent to fix all existing technical debt in a project.
 
-Например, если до изменения уже существовал метод с 63 statements:
+For example, if a method already had 63 statements before the change:
 
 ```text
-до:    63 statements
-после: 63 statements
+before: 63 statements
+after:  63 statements
 ```
 
-это не считается новой ошибкой агента.
+this is not considered a new agent error.
 
-Если Codex ухудшил существующий код:
+If Codex makes existing code worse:
 
 ```text
-до:    63 statements
-после: 70 statements
+before: 63 statements
+after:  70 statements
 ```
 
-Harness зафиксирует регрессию.
+the Harness records a regression.
 
-`CFQ001` и метрики Ruff (`C901`, `PLR0912`, `PLR0915`, `PLR1702`) сравниваются численно по правилу и полному имени функции. Уменьшение превышения, например с 82 до 81 строки при лимите 80, допускается. Перенос функции на другие строки не считается регрессией.
+`CFQ001` and the Ruff metrics (`C901`, `PLR0912`, `PLR0915`, `PLR1702`) are compared numerically by rule and fully qualified function name. Reducing an excess, for example from 82 to 81 lines with a limit of 80, is allowed. Moving a function to different lines is not considered a regression.
 
-Остальные диагностики Ruff сравниваются по коду, тексту сообщения и количеству повторений.
+Other Ruff diagnostics are compared by code, message text, and occurrence count.
 
-Если новый метод сразу нарушает ограничения — это также считается регрессией.
+If a new method violates the limits immediately, that is also considered a regression.
 
-Таким образом:
+Therefore:
 
 ```text
-старый технический долг != ошибка Codex
+existing technical debt != Codex error
 
-новый технический долг = ошибка
+new technical debt = error
 
-ухудшение существующего кода = ошибка
+worsening existing code = error
 ```
 
-## Текущие проверки
+## Current checks
 
-### Длина функции
+### Function length
 
-По умолчанию:
+Default:
 
 ```toml
 max_lines = 80
 ```
 
-Физическую длину вычисляет plugin [`flake8-functions`](https://github.com/best-doctor/flake8-functions) по правилу `CFQ001`. 80 строк разрешены, 81 строка считается нарушением. Harness не считает строки самостоятельно: он запускает Flake8, получает измерение из `CFQ001` и использует AST только для полного имени функции.
+Physical length is calculated by the [`flake8-functions`](https://github.com/best-doctor/flake8-functions) plugin using rule `CFQ001`. 80 lines are allowed; 81 lines are a violation. The Harness does not count lines itself: it runs Flake8, obtains the measurement from `CFQ001`, and uses the AST only to determine the fully qualified function name.
 
-Plugin считает диапазон от первого выражения тела после необязательного docstring до последнего AST-узла функции. Заголовок, декораторы и отдельный docstring не входят; пустые строки и комментарии внутри диапазона влияют на длину. Настройки Flake8 целевого проекта и `noqa` не могут отключить глобальную проверку Harness.
+The plugin counts the range from the first statement in the body after an optional docstring to the function's last AST node. The header, decorators, and a standalone docstring are excluded; blank lines and comments within the range affect the length. The target project's Flake8 settings and `noqa` cannot disable the Harness's global check.
 
-Пример:
+Example:
 
 ```text
 CFQ001 PaymentService.process: Function process has length 81 that exceeds max allowed length 80
 ```
 
-### Количество statements
+### Number of statements
 
-По умолчанию:
+Default:
 
 ```toml
 max_statements = 50
 ```
 
-Эту независимую метрику продолжает вычислять Ruff `PLR0915`. Пустые строки и комментарии не являются statements, поэтому `CFQ001` и `PLR0915` контролируют разные свойства функции.
+This independent metric continues to be calculated by Ruff `PLR0915`. Blank lines and comments are not statements, so `CFQ001` and `PLR0915` control different properties of a function.
 
-### Вложенность
+### Nesting
 
-По умолчанию:
+Default:
 
 ```toml
 max_nested_blocks = 4
 ```
 
-Harness отслеживает слишком глубокую управляющую структуру.
+The Harness tracks excessively deep control structures.
 
-Например:
+For example:
 
 ```python
 if condition:
@@ -137,21 +139,21 @@ if condition:
                     ...
 ```
 
-Такой код становится сложнее читать, тестировать и изменять.
+Such code becomes harder to read, test, and change.
 
-Глубину вычисляет Ruff `PLR1702`. Принимается семантика Ruff: сам `match` не добавляет уровень, а блоки во вложенных функциях могут влиять на оценку внешней функции. Для правила включён preview только lint; preview formatter выключен.
+Depth is calculated by Ruff `PLR1702`. Ruff semantics are used: `match` itself does not add a level, while blocks in nested functions can affect the enclosing function's score. Preview is enabled only for linting; formatter preview is disabled.
 
-PLR1702 может сообщать о нескольких блоках внутри функции. Harness связывает каждую диагностику с самой внутренней функцией, содержащей начало указанного блока, и сравнивает максимальное значение по полному имени функции. При одинаковой глубине выбирается первый блок по расположению. Например, переход с глубины 6 на 5 допускается, с 5 на 6 блокируется; перестановка блоков с сохранением максимума допускается.
+PLR1702 may report several blocks within one function. The Harness associates each diagnostic with the innermost function containing the beginning of the reported block and compares the maximum value by fully qualified function name. When depths are equal, the first block by location is selected. For example, changing a depth from 6 to 5 is allowed, while changing it from 5 to 6 is blocked; reordering blocks without changing the maximum is allowed.
 
-### Количество ветвлений
+### Number of branches
 
-По умолчанию:
+Default:
 
 ```toml
 max_branches = 12
 ```
 
-Метрику вычисляет Ruff `PLR0912`. Учитываются управляющие конструкции вроде:
+The metric is calculated by Ruff `PLR0912`. It accounts for control-flow constructs such as:
 
 ```text
 if
@@ -165,52 +167,52 @@ finally
 match / case
 ```
 
-Это ограничение объёма управляющей логики. Например, Ruff считает `if/else` двумя ветвями. Значение `max_branches` относится к этой метрике.
+This limits the amount of control-flow logic. For example, Ruff counts `if/else` as two branches. The `max_branches` value applies to this metric.
 
-### Сложность функции
+### Function complexity
 
-По умолчанию:
+Default:
 
 ```toml
 max_complexity = 10
 ```
 
-Для расчёта используется Ruff `C901` (McCabe).
+Ruff `C901` (McCabe) is used for the calculation.
 
-Правило ограничивает структурную сложность функций, методов и вложенных функций. `and/or`, условные выражения и comprehension не повышают C901. Например, `return a and b and c` даёт C901 = 1. C901 также учитывает вложенные определения при оценке внешней функции; вложенные функции диагностируются и отдельно.
+The rule limits the structural complexity of functions, methods, and nested functions. `and/or`, conditional expressions, and comprehensions do not increase C901. For example, `return a and b and c` gives C901 = 1. C901 also includes nested definitions when scoring an enclosing function; nested functions are diagnosed separately as well.
 
-Описание правил: [C901](https://docs.astral.sh/ruff/rules/complex-structure/), [PLR0912](https://docs.astral.sh/ruff/rules/too-many-branches/), [PLR0915](https://docs.astral.sh/ruff/rules/too-many-statements/), [PLR1702](https://docs.astral.sh/ruff/rules/too-many-nested-blocks/).
+Rule descriptions: [C901](https://docs.astral.sh/ruff/rules/complex-structure/), [PLR0912](https://docs.astral.sh/ruff/rules/too-many-branches/), [PLR0915](https://docs.astral.sh/ruff/rules/too-many-statements/), [PLR1702](https://docs.astral.sh/ruff/rules/too-many-nested-blocks/).
 
 ### Ruff
 
-Ruff запускается после изменения Python-кода в двух проходах для исходников до и после изменения:
+After Python code changes, Ruff runs in two passes for the source before and after the change:
 
-- Глобальные метрики `C901`, `PLR0912`, `PLR0915` и `PLR1702`: изолированный запуск с лимитами из `~/.codex/harness/config/quality.toml` и preview lint. Настройки целевого проекта и `noqa` не отключают эти ограничения.
-- Остальные правила: обычный поиск конфигурации Ruff в целевом проекте. Метрики исключаются из сравнения этого прохода, чтобы не дублировать сообщения и не блокировать улучшение числовых значений.
+- Global metrics `C901`, `PLR0912`, `PLR0915`, and `PLR1702`: an isolated run with limits from `~/.codex/harness/config/quality.toml` and lint preview enabled. The target project's settings and `noqa` do not disable these limits.
+- Other rules: normal Ruff configuration discovery in the target project. Metrics are excluded from this pass's comparison to avoid duplicate messages and to allow improvements in numeric values.
 
-Лимиты метрик целевого проекта также не заменяют лимиты Harness. Ручной запуск обычного Ruff в целевом проекте продолжает использовать его собственные настройки.
+The target project's metric limits also do not replace the Harness limits. Running regular Ruff manually in the target project continues to use the project's own settings.
 
-Он работает по тому же принципу сравнения состояния до/после.
+It follows the same before/after state comparison principle.
 
-Если ошибка уже существовала:
-
-```text
-до:    F401
-после: F401
-```
-
-она не блокирует работу.
-
-Если Codex добавил новую ошибку:
+If an error already existed:
 
 ```text
-до:    clean
-после: F401
+before: F401
+after:  F401
 ```
 
-Harness возвращает её агенту.
+it does not block the work.
 
-## Структура проекта
+If Codex adds a new error:
+
+```text
+before: clean
+after:  F401
+```
+
+the Harness reports it to the agent.
+
+## Project structure
 
 ```text
 codex-harness/
@@ -226,7 +228,7 @@ codex-harness/
 └── pyproject.toml
 ```
 
-После установки исполняемый код берётся из Python package и не зависит от clone. Пользовательские данные находятся отдельно:
+After installation, executable code is loaded from the Python package and does not depend on the clone. User data is stored separately:
 
 ```text
 ~/.codex/harness/
@@ -234,56 +236,56 @@ codex-harness/
 └── state/retry/<scope_hash>/
 ```
 
-Отсутствующий `quality.toml` создаётся автоматически из встроенного шаблона. Существующий файл не перезаписывается; отсутствующие в нём параметры получают текущие значения по умолчанию.
+If `quality.toml` is missing, it is created automatically from the built-in template. An existing file is not overwritten; parameters missing from it receive the current default values.
 
-### Ответственность модулей checks
+### Responsibilities of the checks modules
 
-Ruff вычисляет C901 (complexity), PLR0912 (branches), PLR0915 (statements), PLR1702 (nesting) и проверяет PLC0415 (imports outside top level). В Harness нет параллельных реализаций этих правил. Четыре числовые метрики применяются с лимитами Harness; PLC0415, как и остальные обычные правила, выполняется в проходе с конфигурацией целевого проекта.
+Ruff calculates C901 (complexity), PLR0912 (branches), PLR0915 (statements), PLR1702 (nesting), and checks PLC0415 (imports outside the top level). The Harness has no parallel implementations of these rules. The four numeric metrics use Harness limits; PLC0415, like other regular rules, runs in the pass configured by the target project.
 
-| Модуль | Ответственность |
+| Module | Responsibility |
 | --- | --- |
-| `python_flake8/` | Запускает `python -m flake8` из окружения Harness, требует установленный `flake8-functions` и строго разбирает только `CFQ001`. |
-| `function_length/` | Проверяет измерение plugin и связывает диагностику с полным именем функции; собственного подсчёта строк нет. |
-| `python_ruff/` | Запускает `python -m ruff`, проверяет JSON и нормализует диагностики. |
-| `ruff_metrics/` | Читает глобальные лимиты, строит неизменённые Ruff options и нормализует числовые метрики. |
-| `ruff_regression.py` | Чтение снимков и сравнение обычных Ruff-диагностик по коду, сообщению и количеству повторений; исключение метрик, сравниваемых численно. |
-| `finding.py` | Общая числовая диагностика для CFQ001 и метрик Ruff. |
-| `comparison.py` | Числовая regression-policy: новая диагностика или рост значения по паре `(rule, symbol)`. |
-| `regression.py` | Применение числовой regression-policy к состоянию файлов до/после; восстановление после синтаксически некорректного baseline. |
-| `symbols.py` | Полные имена функций, методов и вложенных функций для устойчивого сравнения при переносе строк. |
-| `code_quality/` | Создаёт и загружает user config, валидирует лимиты, запускает общий анализ и формирует CLI-вывод. |
+| `python_flake8/` | Runs `python -m flake8` from the Harness environment, requires the installed `flake8-functions` plugin, and strictly parses only `CFQ001`. |
+| `function_length/` | Validates the plugin measurement and associates the diagnostic with the fully qualified function name; it does not count lines itself. |
+| `python_ruff/` | Runs `python -m ruff`, validates JSON, and normalizes diagnostics. |
+| `ruff_metrics/` | Reads global limits, builds immutable Ruff options, and normalizes numeric metrics. |
+| `ruff_regression.py` | Reads snapshots and compares regular Ruff diagnostics by code, message, and occurrence count; excludes metrics that are compared numerically. |
+| `finding.py` | Common numeric diagnostic for CFQ001 and Ruff metrics. |
+| `comparison.py` | Numeric regression policy: a new diagnostic or an increased value for a `(rule, symbol)` pair. |
+| `regression.py` | Applies the numeric regression policy to file states before and after a change; handles recovery from a syntactically invalid baseline. |
+| `symbols.py` | Fully qualified names of functions, methods, and nested functions for stable comparison when line positions change. |
+| `code_quality/` | Creates and loads user configuration, validates limits, runs the combined analysis, and produces CLI output. |
 
-Несколько диагностик PLR1702 для одной функции сводятся к максимальному значению, уже вычисленному Ruff. Это часть regression-policy: она позволяет сравнивать глубину до/после, не вычисляя вложенность повторно. Числовое сравнение и сравнение обычных диагностик разделены, поскольку у них разные ключи и семантика: улучшение превышенной метрики допускается, а повторения обычных нарушений учитываются по количеству.
+Multiple PLR1702 diagnostics for one function are reduced to the maximum value already calculated by Ruff. This is part of the regression policy: it allows before/after depth comparison without recalculating nesting. Numeric comparison and regular diagnostic comparison are separate because they use different keys and semantics: improving an exceeded metric is allowed, while repeated regular violations are tracked by count.
 
-Все импорты находятся в namespace `codex_harness`. Для ручного запуска и lifecycle hooks используются установленные console scripts; старые файловые launchers не поддерживаются.
+All imports use the `codex_harness` namespace. Installed console scripts are used for manual runs and lifecycle hooks; legacy file-based launchers are not supported.
 
-## Требования
+## Requirements
 
-Рекомендуется:
+Recommended:
 
 ```text
 Python 3.12+
-Codex CLI с поддержкой lifecycle hooks
+Codex CLI with lifecycle hook support
 ```
 
-Проверить Python:
+Check Python:
 
 ```bash
 python3 --version
 ```
 
-После установки проверить toolchain:
+After installation, check the toolchain:
 
 ```bash
 python3 -m flake8 --version
 python3 -m ruff --version
 ```
 
-Проверенная комбинация — Flake8 7.3.0, flake8-functions 0.1.0 и Ruff 0.16.6. Совместимые диапазоны записаны в `pyproject.toml`. Harness запускает все инструменты через тот же Python, в который установлен пакет.
+The verified combination is Flake8 7.3.0, flake8-functions 0.1.0, and Ruff 0.16.6. Compatible version ranges are recorded in `pyproject.toml`. The Harness runs all tools through the same Python installation into which the package was installed.
 
-## Установка
+## Installation
 
-Клонировать исходники в любой временный или постоянный каталог и установить пакет:
+Clone the sources into any temporary or permanent directory and install the package:
 
 ```bash
 git clone https://github.com/r-tatarinov/codex-harness.git
@@ -291,22 +293,22 @@ cd codex-harness
 python3 -m pip install .
 ```
 
-После установки clone не нужен для выполнения Harness. Найти абсолютные пути console scripts:
+After installation, the clone is not needed to run the Harness. Find the absolute paths of the console scripts:
 
 ```bash
 command -v codex-harness-pre-tool
 command -v codex-harness-post-tool
 ```
 
-## Подключение к Codex
+## Connecting to Codex
 
-Создать глобальный файл:
+Create the global file:
 
 ```text
 ~/.codex/hooks.json
 ```
 
-Пример:
+Example:
 
 ```json
 {
@@ -342,40 +344,40 @@ command -v codex-harness-post-tool
 }
 ```
 
-Пути в примере необходимо заменить результатами `command -v`. Старые команды через `hooks/pre_tool.py` и `hooks/post_tool.py` не поддерживаются.
+Replace the paths in the example with the results of `command -v`. Legacy commands using `hooks/pre_tool.py` and `hooks/post_tool.py` are not supported.
 
-После изменения `hooks.json` необходимо полностью перезапустить Codex.
+After changing `hooks.json`, fully restart Codex.
 
-При первом запуске Codex покажет:
+On the first run, Codex displays:
 
 ```text
 Hooks need review
 ```
 
-Необходимо проверить hooks и разрешить их выполнение.
+Review the hooks and allow them to run.
 
-После запуска состояние можно посмотреть командой:
+After startup, inspect their state with:
 
 ```text
 /hooks
 ```
 
-Должно быть активно:
+The following should be active:
 
 ```text
 PreToolUse     1 installed / 1 active
 PostToolUse    1 installed / 1 active
 ```
 
-## Настройка правил
+## Configuring rules
 
-Все runtime-лимиты находятся в:
+All runtime limits are stored in:
 
 ```text
 ~/.codex/harness/config/quality.toml
 ```
 
-При отсутствии файла первый hook создаёт его автоматически. Текущие defaults:
+If the file is absent, the first hook creates it automatically. Current defaults:
 
 ```toml
 [verification]
@@ -391,31 +393,31 @@ max_statements = 50
 max_nested_blocks = 4
 ```
 
-Чтобы изменить лимит `CFQ001`, отредактировать:
+To change the `CFQ001` limit, edit:
 
 ```toml
 [python.functions]
 max_lines = 120
 ```
 
-Все значения должны быть целыми числами `>= 1`. Существующий файл не переписывается при обновлении Harness; новые отсутствующие ключи используют встроенные defaults. Архитектурные проверки и проверки зависимостей между слоями не изменяются.
+All values must be integers `>= 1`. An existing file is not overwritten when the Harness is updated; new missing keys use the built-in defaults. Architectural checks and dependency checks between layers are unchanged.
 
-## Ручная проверка файла
+## Checking a file manually
 
-Quality rules можно запускать независимо от Codex:
+Quality rules can be run independently of Codex:
 
 ```bash
 codex-harness-check path/to/file.py
 ```
 
-Например:
+For example:
 
 ```bash
 codex-harness-check \
     project/services/payment.py
 ```
 
-Если ограничения нарушены:
+If limits are violated:
 
 ```text
 CODE QUALITY CHECK FAILED
@@ -425,17 +427,17 @@ CODE QUALITY CHECK FAILED
 - C901 PaymentService.process: `process` is too complex (18 > 10)
 ```
 
-Ruff можно проверить отдельно:
+Ruff can be checked separately:
 
 ```bash
 codex-harness-ruff path/to/file.py
 ```
 
-Эта команда использует настройки целевого проекта. Для всех глобальных ограничений Harness, включая `CFQ001` и метрики Ruff, используйте `codex-harness-check`.
+This command uses the target project's settings. For all global Harness constraints, including `CFQ001` and Ruff metrics, use `codex-harness-check`.
 
-## Проверка самого Harness
+## Checking the Harness itself
 
-Из корня репозитория:
+From the repository root:
 
 ```bash
 ruff check .
@@ -443,15 +445,15 @@ ruff format --check .
 python3 -m unittest discover -v
 ```
 
-Тесты проверяют границу 80/81, числовые regression-сценарии, автоматическое создание конфигурации и полный цикл `PreToolUse` / `PostToolUse` через установленные console scripts.
+Tests cover the 80/81 boundary, numeric regression scenarios, automatic configuration creation, and the complete `PreToolUse` / `PostToolUse` cycle through the installed console scripts.
 
-## Что происходит при ошибке
+## What happens on failure
 
-`PostToolUse` не откатывает изменение автоматически.
+`PostToolUse` does not automatically revert a change.
 
-Он возвращает Codex информацию о найденной регрессии.
+It reports the detected regression to Codex.
 
-Например:
+For example:
 
 ```text
 Verification failed.
@@ -467,11 +469,11 @@ Ruff:
 - F401 `os` imported but unused
 ```
 
-После этого агент получает конкретную диагностику через `reason` и `additionalContext` и может исправить код следующей итерацией, пока бюджет текущего turn не исчерпан.
+The agent then receives the specific diagnostic through `reason` and `additionalContext` and can fix the code in the next iteration while the current turn's budget remains available.
 
-### Лимит последовательных verification FAIL
+### Consecutive verification FAIL limit
 
-`[verification] max_attempts = 3` означает максимум три последовательных неуспешных correction attempts внутри одного пользовательского turn. Если параметр отсутствует, используется `3`. Допускаются только целые числа `>= 1`; boolean, строки и дробные значения недопустимы. Параметр читается существующим TOML loader.
+`[verification] max_attempts = 3` means at most three consecutive unsuccessful correction attempts within one user turn. If the parameter is absent, `3` is used. Only integers `>= 1` are accepted; booleans, strings, and fractional values are invalid. The parameter is read by the existing TOML loader.
 
 ```text
 turn A
@@ -485,7 +487,7 @@ turn B           → fresh retry budget
 patch            → FAIL 1/3
 ```
 
-После последнего FAIL и при запрете следующего `apply_patch` агент получает:
+After the last FAIL and when the next `apply_patch` is denied, the agent receives:
 
 ```text
 Verification failed.
@@ -493,83 +495,83 @@ Verification attempt 3/3
 Retry limit reached for the current turn.
 
 Last diagnostics:
-<последняя фактическая диагностика проверки>
+<last actual verification diagnostic>
 ```
 
-`PreToolUse` возвращает `permissionDecision: "deny"` до изменения файлов, не создаёт снимок и не увеличивает attempts. Значение `4/3` не возникает. Запрет распространяется на любой следующий `apply_patch` в том же scope, включая непроверяемые файлы.
+`PreToolUse` returns `permissionDecision: "deny"` before files are changed, does not create a snapshot, and does not increment attempts. A value of `4/3` cannot occur. The denial applies to every subsequent `apply_patch` in the same scope, including patches to files that are not checked.
 
-Один attempt расходуется на один фактически изменяющий Python-код patch с общим результатом FAIL, независимо от количества файлов, правил или диагностик. Смена причины отказа, например PLC0415 → F401, не начинает отдельный бюджет.
+One attempt is consumed by one patch that actually changes Python code and has an overall FAIL result, regardless of the number of files, rules, or diagnostics. Changing the failure reason, for example from PLC0415 to F401, does not start a separate budget.
 
-Релевантный PASS немедленно удаляет `attempts.json` текущего scope: `FAIL → FAIL → PASS → FAIL` даёт `1/3 → 2/3 → reset → 1/3`. PASS сохраняет существующую семантику отсутствия новых регрессий относительно снимка перед патчем, а не требует устранения всего старого технического долга. Изменение только README или другого непроверяемого файла, no-op Python patch, повторный hook и обычные действия агента не расходуют и не сбрасывают бюджет. Проверки запускаются только при изменении содержимого или существования отслеживаемого Python-файла.
+A relevant PASS immediately deletes the current scope's `attempts.json`: `FAIL → FAIL → PASS → FAIL` produces `1/3 → 2/3 → reset → 1/3`. PASS preserves the existing semantics of having no new regressions relative to the snapshot before the patch; it does not require all old technical debt to be eliminated. A change only to README or another unchecked file, a no-op Python patch, a repeated hook, and regular agent actions neither consume nor reset the budget. Checks run only when the contents or existence of a tracked Python file change.
 
-### Scope и состояние
+### Scope and state
 
-Scope — стабильный SHA-256 от JSON-массива `[session_identifier, resolved_cwd, turn_id]`. Используется `session_id` из payload; при отсутствии — `CODEX_THREAD_ID`, затем `CODEX_SESSION_ID`. Для turn требуется непустой корректный `turn_id` из payload: session-wide и глобального fallback нет. Новый turn получает другой каталог, не удаляя состояние предыдущего. Разные session и cwd также изолированы.
+The scope is a stable SHA-256 hash of the JSON array `[session_identifier, resolved_cwd, turn_id]`. `session_id` from the payload is used; if it is absent, `CODEX_THREAD_ID` is used, followed by `CODEX_SESSION_ID`. A non-empty valid `turn_id` from the payload is required for the turn: there is no session-wide or global fallback. A new turn receives a different directory without deleting the previous turn's state. Different sessions and working directories are isolated as well.
 
-`state/retry/<scope_hash>/attempts.json` содержит только `consecutive_failed_attempts` и `last_failure`. Снимки находятся в том же каталоге; их имена получаются из `tool_use_id`, который не входит в retry scope. Старые снимки непосредственно в `state/` новый механизм не использует.
+`state/retry/<scope_hash>/attempts.json` contains only `consecutive_failed_attempts` and `last_failure`. Snapshots are stored in the same directory; their names are derived from `tool_use_id`, which is not part of the retry scope. The new mechanism does not use legacy snapshots stored directly in `state/`.
 
-Операции защищены файловой блокировкой scope; JSON записывается через временный файл и атомарный replace. Post-hook забирает снимок переименованием перед verification и удаляет его перед сохранением результата. Повторная или конкурентная доставка того же PostToolUse не выполняет проверку заново и не увеличивает счётчик. При прерывании процесса может остаться файл `.processing`; он не обрабатывается повторно.
+Operations are protected by a per-scope file lock; JSON is written through a temporary file and an atomic replace. The post-hook claims a snapshot by renaming it before verification and deletes it before saving the result. Repeated or concurrent delivery of the same PostToolUse does not run verification again or increment the counter. If the process is interrupted, a `.processing` file may remain; it is not processed again.
 
-Состояние прошлых turns — transient runtime state: оно не участвует в новых execution scopes. Автоматический garbage collector не добавлен.
+State from previous turns is transient runtime state: it does not participate in new execution scopes. No automatic garbage collector has been added.
 
-### Code failure и infrastructure failure
+### Code failure and infrastructure failure
 
-Нарушения Ruff, quality-регрессии и SyntaxError при parsing изменённого source расходуют попытку. Ошибка parsing сохраняет имя файла, строку, колонку и сообщение. Если старый снимок синтаксически некорректен, прежние quality metrics считаются недоступными; исправленный файл проверяется по действующим лимитам. Это позволяет исправить SyntaxError в оставшиеся попытки.
+Ruff violations, quality regressions, and SyntaxError while parsing changed source consume an attempt. A parsing error preserves the file name, line, column, and message. If the old snapshot is syntactically invalid, the previous quality metrics are considered unavailable; the corrected file is checked against the active limits. This makes it possible to fix a SyntaxError with the remaining attempts.
 
-Невозможность запустить checker или plugin, timeout (10 секунд на один процесс Ruff или Flake8), filesystem/permission error, неверная конфигурация, повреждённый retry state, malformed checker response, внутреннее исключение или неопределимый scope блокируют операцию с исходной инфраструктурной диагностикой, сохраняя attempts и `last_failure`. Они не считаются PASS. Тип ошибки определяется структурно; произвольный SyntaxError внутри Harness не считается ошибкой исходника агента.
+An inability to start a checker or plugin, a timeout (10 seconds per Ruff or Flake8 process), a filesystem or permission error, invalid configuration, corrupted retry state, malformed checker response, internal exception, or indeterminate scope blocks the operation with the original infrastructure diagnostic while preserving attempts and `last_failure`. These outcomes are not considered PASS. Error types are determined structurally; an arbitrary SyntaxError inside the Harness is not treated as an agent source-code error.
 
-Известное ограничение адаптера: Ruff может вернуть `code: null` для синтаксической ошибки старого снимка. Текущий parser ожидает строковый код и в таком случае возвращает infrastructure failure даже после исправления source. Это существовавшее поведение сохранено при очистке модулей; восстановление после SyntaxError зависит от формата ответа установленного Ruff.
+Known adapter limitation: Ruff may return `code: null` for a syntax error in an old snapshot. The current parser expects a string code and, in that case, returns an infrastructure failure even after the source is fixed. This pre-existing behavior was preserved during module cleanup; recovery after a SyntaxError depends on the response format of the installed Ruff version.
 
-### Подагенты
+### Subagents
 
-Встроенные схемы установленного Codex предусматривают `agent_id`/`agent_type`, но не предоставляют root user turn identifier в tool hooks. При наличии этой явной agent metadata Harness блокирует патч как infrastructure failure без отдельного retry budget. Равенство parent/subagent `turn_id` не предполагается; связь не выводится из PID, времени или transcript.
+The installed Codex schemas include `agent_id`/`agent_type`, but do not provide the root user turn identifier in tool hooks. When this explicit agent metadata is present, the Harness blocks the patch as an infrastructure failure without a separate retry budget. Equality between parent and subagent `turn_id` values is not assumed; the relationship is not inferred from PID, time, or transcript.
 
-Ограничение: **shared retry budget for subagents is not supported without a reliable root turn identifier**. Проверка встроенной схемы не означает, что выполнен живой end-to-end тест подагента.
+Limitation: **a shared retry budget for subagents is not supported without a reliable root turn identifier**. Checking the built-in schema does not mean that a live end-to-end subagent test has been performed.
 
-Retry формируется последовательностью tool calls самого агента. Harness не запускает LLM, retry-agent, собственный agent loop или final verification gate.
+Retries are formed by the agent's own sequence of tool calls. The Harness does not run an LLM, retry agent, custom agent loop, or final verification gate.
 
-## Текущие ограничения
+## Current limitations
 
-Сейчас Harness ориентирован в первую очередь на Python.
+The Harness currently focuses primarily on Python.
 
-Проверки подключены к:
+Checks are connected to:
 
 ```text
 apply_patch
 ```
 
-Поэтому текущий quality flow рассчитан на изменения, которые Codex выполняет через этот инструмент.
+Therefore, the current quality flow is designed for changes that Codex makes through this tool.
 
-Изменения через произвольные shell-команды пока не входят в этот же механизм сравнения.
+Changes made through arbitrary shell commands are not yet included in the same comparison mechanism.
 
-Также пока не реализованы:
+Also not yet implemented:
 
-- архитектурные правила ООП;
-- правила зависимостей между слоями приложения;
-- JavaScript / TypeScript / Vue проверки;
-- финальный `Stop` quality gate;
-- автоматический запуск тестов и проверок всего проекта перед завершением задачи;
-- semantic review сложных архитектурных изменений.
+- OOP architectural rules;
+- dependency rules between application layers;
+- JavaScript / TypeScript / Vue checks;
+- a final `Stop` quality gate;
+- automatic tests and project-wide checks before task completion;
+- semantic review of complex architectural changes.
 
-## План развития
+## Roadmap
 
-Следующие направления:
+Next directions:
 
 ```text
-ООП / architecture rules
+OOP / architecture rules
         |
-        +-- новые функции вне классов в class-oriented модулях
-        +-- нарушение существующей структуры проекта
-        +-- неправильные зависимости между слоями
+        +-- new functions outside classes in class-oriented modules
+        +-- violations of the project's existing structure
+        +-- incorrect dependencies between layers
 
 Stop hook
         |
-        +-- финальная проверка перед завершением задачи
+        +-- final check before task completion
         +-- tests
         +-- typing
         +-- project-wide checks
 
-Другие языки
+Other languages
         |
         +-- ESLint
         +-- TypeScript
@@ -577,5 +579,8 @@ Stop hook
         +-- HTML
 ```
 
-Основная цель проекта — вынести контроль качества кода из вероятностного поведения модели в отдельный детерминированный слой вокруг агента.
+The project's main goal is to move code quality control out of the model's probabilistic behavior and into a separate deterministic layer around the agent.
 
+## Documentation maintenance
+
+When changing the documentation, update `README.md` and `README.ru.md` together, keeping the content and structure of both language versions semantically equivalent.
