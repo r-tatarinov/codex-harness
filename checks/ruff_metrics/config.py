@@ -1,28 +1,25 @@
 """Global Ruff metric limits and the command options enforcing them."""
 
-import tomllib
-from pathlib import Path
+from ..code_quality.config import load_ruff_settings
 
-CONFIG_PATH = Path(__file__).resolve().parents[2] / "pyproject.toml"
 METRIC_SETTINGS = {
     "C901": ("mccabe", "max-complexity"),
     "PLR0912": ("pylint", "max-branches"),
+    "PLR0915": ("pylint", "max-statements"),
     "PLR1702": ("pylint", "max-nested-blocks"),
 }
 METRIC_CODES = frozenset(METRIC_SETTINGS)
+CONFIG_KEYS = {
+    "C901": "max_complexity",
+    "PLR0912": "max_branches",
+    "PLR0915": "max_statements",
+    "PLR1702": "max_nested_blocks",
+}
 
 
 def load_limits() -> dict[str, int]:
-    with CONFIG_PATH.open("rb") as file:
-        lint = tomllib.load(file)["tool"]["ruff"]["lint"]
-
-    limits = {}
-    for code, (plugin, setting) in METRIC_SETTINGS.items():
-        value = lint[plugin][setting]
-        if type(value) is not int or value < 0:
-            raise ValueError(f"Invalid Harness Ruff limit: {plugin}.{setting}")
-        limits[code] = value
-    return limits
+    settings = load_ruff_settings()
+    return {code: settings[key] for code, key in CONFIG_KEYS.items()}
 
 
 def build_options(limits: dict[str, int]) -> tuple[str, ...]:

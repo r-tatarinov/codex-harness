@@ -1,8 +1,50 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "codex-harness"
+version = "0.1.0"
+description = "Deterministic code-quality hooks for Codex"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "flake8>=7.3,<8",
+    "flake8-functions>=0.1,<0.2",
+    "ruff>=0.16,<0.17",
+]
+
+[project.scripts]
+codex-harness-check = "codex_harness.checks.code_quality:main"
+codex-harness-ruff = "codex_harness.checks.python_ruff:main"
+codex-harness-pre-tool = "codex_harness.hooks.pre_tool:main"
+codex-harness-post-tool = "codex_harness.hooks.post_tool:main"
+
+[tool.setuptools]
+packages = [
+    "codex_harness",
+    "codex_harness.checks",
+    "codex_harness.checks.code_quality",
+    "codex_harness.checks.function_length",
+    "codex_harness.checks.python_flake8",
+    "codex_harness.checks.python_ruff",
+    "codex_harness.checks.ruff_metrics",
+    "codex_harness.hooks",
+]
+
+[tool.setuptools.package-dir]
+codex_harness = "src/codex_harness"
+"codex_harness.checks" = "checks"
+"codex_harness.hooks" = "hooks"
+
+[tool.setuptools.package-data]
+codex_harness = ["defaults/*.toml"]
+
 [tool.ruff]
 target-version = "py312"
 
 [tool.ruff.lint]
-extend-select = ["C901", "PLC0415", "PLR0912", "PLR1702"]
+extend-select = ["C901", "PLC0415", "PLR0912", "PLR0915", "PLR1702"]
 preview = true
 explicit-preview-rules = true
 
@@ -12,3 +54,4 @@ max-complexity = 10
 [tool.ruff.lint.pylint]
 max-branches = 12
 max-nested-blocks = 4
+max-statements = 50

@@ -5,8 +5,8 @@ from collections import Counter
 from collections.abc import Iterable
 from pathlib import Path
 
-from python_ruff import RuffFinding, analyze_source
-from ruff_metrics import METRIC_CODES
+from .python_ruff import RuffFinding, analyze_source
+from .ruff_metrics import METRIC_CODES
 
 
 def find_regressions(

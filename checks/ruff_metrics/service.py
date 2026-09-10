@@ -3,9 +3,8 @@
 import ast
 from pathlib import Path
 
-from finding import Finding
-from python_ruff import run_check
-
+from ..finding import Finding
+from ..python_ruff import run_check
 from .config import build_options, load_limits
 from .normalization import collapse_nesting, find_symbol, to_finding
 

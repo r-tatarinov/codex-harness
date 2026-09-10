@@ -5,13 +5,8 @@ import re
 import sys
 from pathlib import Path
 
-HARNESS_ROOT = Path.home() / ".codex" / "harness"
-STATE_DIR = HARNESS_ROOT / "state"
-
-sys.path.insert(0, str(HARNESS_ROOT / "checks"))
-
-from code_quality import load_max_attempts
-from retry_state import (
+from ..checks.code_quality import HARNESS_ROOT, load_max_attempts
+from .retry_state import (
     atomic_write,
     failure_reason,
     file_state,
@@ -21,6 +16,8 @@ from retry_state import (
     scope_path,
     snapshot_path,
 )
+
+STATE_DIR = HARNESS_ROOT / "state"
 
 PATCH_FILE_RE = re.compile(
     r"^\*\*\* (?:(?:Add|Update|Delete) File|Move to): (.+?)\s*$",

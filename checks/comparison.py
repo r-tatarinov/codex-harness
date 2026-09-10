@@ -1,6 +1,6 @@
-"""Numeric regression policy shared by custom length and Ruff metrics."""
+"""Numeric regression policy for Ruff metrics."""
 
-from finding import Finding
+from .finding import Finding
 
 
 def find_regressions(

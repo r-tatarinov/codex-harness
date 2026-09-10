@@ -3,9 +3,7 @@
 import sys
 from pathlib import Path
 
-from finding import Finding
-
-from .config import load_config
+from ..finding import Finding
 from .service import analyze_file
 
 
@@ -17,8 +15,6 @@ def print_findings(findings: list[Finding]) -> None:
 
 
 def main() -> int:
-    config = load_config()
-
     findings: list[Finding] = []
 
     for path in map(Path, sys.argv[1:]):
@@ -29,7 +25,6 @@ def main() -> int:
             findings.extend(
                 analyze_file(
                     path=path,
-                    config=config,
                 )
             )
         except (

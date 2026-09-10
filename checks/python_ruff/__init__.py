@@ -2,11 +2,11 @@
 
 from .cli import main, print_findings
 from .parsing import parse_diagnostic
-from .runner import RUFF, analyze_file, analyze_source, run_check
+from .runner import RUFF_COMMAND, analyze_file, analyze_source, run_check
 from .schema import RuffFinding
 
 __all__ = [
-    "RUFF",
+    "RUFF_COMMAND",
     "RuffFinding",
     "analyze_file",
     "analyze_source",

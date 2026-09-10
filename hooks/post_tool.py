@@ -4,15 +4,10 @@ import json
 import sys
 from pathlib import Path
 
-HARNESS_ROOT = Path.home() / ".codex" / "harness"
-CHECKS_DIR = HARNESS_ROOT / "checks"
-STATE_DIR = HARNESS_ROOT / "state"
-
-sys.path.insert(0, str(CHECKS_DIR))
-
-from code_quality import SourceSyntaxError, load_max_attempts
-from regression import check_snapshot as check_quality_snapshot
-from retry_state import (
+from ..checks.code_quality import HARNESS_ROOT, SourceSyntaxError, load_max_attempts
+from ..checks.regression import check_snapshot as check_quality_snapshot
+from ..checks.ruff_regression import check_snapshot as check_ruff_snapshot
+from .retry_state import (
     atomic_write,
     consume_snapshot,
     failure_reason,
@@ -22,7 +17,8 @@ from retry_state import (
     scope_path,
     snapshot_path,
 )
-from ruff_regression import check_snapshot as check_ruff_snapshot
+
+STATE_DIR = HARNESS_ROOT / "state"
 
 
 def build_quality_lines(regressions: list) -> list[str]:

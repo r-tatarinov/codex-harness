@@ -4,8 +4,8 @@ import ast
 import re
 from collections.abc import Iterable
 
-from finding import Finding
-from python_ruff import RuffFinding
+from ..finding import Finding
+from ..python_ruff import RuffFinding
 
 MEASUREMENT_RE = re.compile(r"\((\d+) > (\d+)\)$")
 
@@ -16,7 +16,7 @@ def find_symbol(
     symbols: dict[int, str],
 ) -> str:
     # Functions are ordered innermost first. PLR1702 points to a block within
-    # a function, while C901 and PLR0912 point to its definition.
+    # a function, while C901, PLR0912 and PLR0915 point to its definition.
     for node in functions:
         if diagnostic.line == node.lineno:
             return symbols[id(node)]

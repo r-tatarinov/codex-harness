@@ -32,7 +32,8 @@ apply_patch
 PostToolUse
   |
   +-- Quality rules
-  |     +-- длина функции
+  |     +-- длина функции (flake8-functions CFQ001)
+  |     +-- количество statements (Ruff PLR0915)
   |     +-- вложенность (Ruff PLR1702)
   |     +-- количество ветвлений (Ruff PLR0912)
   |     +-- сложность функции (Ruff C901)
@@ -51,11 +52,11 @@ PostToolUse
 
 Harness не заставляет агента исправлять весь старый технический долг проекта.
 
-Например, если до изменения уже существовал метод длиной 93 строки:
+Например, если до изменения уже существовал метод с 63 statements:
 
 ```text
-до:    93 строки
-после: 93 строки
+до:    63 statements
+после: 63 statements
 ```
 
 это не считается новой ошибкой агента.
@@ -63,13 +64,13 @@ Harness не заставляет агента исправлять весь с�
 Если Codex ухудшил существующий код:
 
 ```text
-до:    93 строки
-после: 110 строк
+до:    63 statements
+после: 70 statements
 ```
 
 Harness зафиксирует регрессию.
 
-Длина функции и метрики Ruff (`C901`, `PLR0912`, `PLR1702`) сравниваются численно по правилу и полному имени функции. Уменьшение превышения, например с 15 до 14 ветвей при лимите 12, допускается. Перенос функции на другие строки не считается регрессией.
+`CFQ001` и метрики Ruff (`C901`, `PLR0912`, `PLR0915`, `PLR1702`) сравниваются численно по правилу и полному имени функции. Уменьшение превышения, например с 82 до 81 строки при лимите 80, допускается. Перенос функции на другие строки не считается регрессией.
 
 Остальные диагностики Ruff сравниваются по коду, тексту сообщения и количеству повторений.
 
@@ -87,7 +88,7 @@ Harness зафиксирует регрессию.
 
 ## Текущие проверки
 
-### Размер функции
+### Длина функции
 
 По умолчанию:
 
@@ -95,20 +96,32 @@ Harness зафиксирует регрессию.
 max_lines = 80
 ```
 
-Если новая функция превышает 80 строк или существующее превышение растёт, Harness возвращает Codex конкретное замечание. Считаются физические строки от `def` / `async def` до конца тела включительно: комментарии, пустые строки и docstring внутри этого диапазона тоже входят в длину. Декораторы не входят.
+Физическую длину вычисляет plugin [`flake8-functions`](https://github.com/best-doctor/flake8-functions) по правилу `CFQ001`. 80 строк разрешены, 81 строка считается нарушением. Harness не считает строки самостоятельно: он запускает Flake8, получает измерение из `CFQ001` и использует AST только для полного имени функции.
+
+Plugin считает диапазон от первого выражения тела после необязательного docstring до последнего AST-узла функции. Заголовок, декораторы и отдельный docstring не входят; пустые строки и комментарии внутри диапазона влияют на длину. Настройки Flake8 целевого проекта и `noqa` не могут отключить глобальную проверку Harness.
 
 Пример:
 
 ```text
-PaymentService.process has 114 lines (maximum 80)
+CFQ001 PaymentService.process: Function process has length 81 that exceeds max allowed length 80
 ```
+
+### Количество statements
+
+По умолчанию:
+
+```toml
+max_statements = 50
+```
+
+Эту независимую метрику продолжает вычислять Ruff `PLR0915`. Пустые строки и комментарии не являются statements, поэтому `CFQ001` и `PLR0915` контролируют разные свойства функции.
 
 ### Вложенность
 
 По умолчанию:
 
 ```toml
-max-nested-blocks = 4
+max_nested_blocks = 4
 ```
 
 Harness отслеживает слишком глубокую управляющую структуру.
@@ -135,7 +148,7 @@ PLR1702 может сообщать о нескольких блоках вну�
 По умолчанию:
 
 ```toml
-max-branches = 12
+max_branches = 12
 ```
 
 Метрику вычисляет Ruff `PLR0912`. Учитываются управляющие конструкции вроде:
@@ -152,27 +165,27 @@ finally
 match / case
 ```
 
-Это ограничение объёма управляющей логики. Например, Ruff считает `if/else` двумя ветвями. Значение `max-branches` относится к этой метрике.
+Это ограничение объёма управляющей логики. Например, Ruff считает `if/else` двумя ветвями. Значение `max_branches` относится к этой метрике.
 
 ### Сложность функции
 
 По умолчанию:
 
 ```toml
-max-complexity = 10
+max_complexity = 10
 ```
 
 Для расчёта используется Ruff `C901` (McCabe).
 
 Правило ограничивает структурную сложность функций, методов и вложенных функций. `and/or`, условные выражения и comprehension не повышают C901. Например, `return a and b and c` даёт C901 = 1. C901 также учитывает вложенные определения при оценке внешней функции; вложенные функции диагностируются и отдельно.
 
-Описание правил: [C901](https://docs.astral.sh/ruff/rules/complex-structure/), [PLR0912](https://docs.astral.sh/ruff/rules/too-many-branches/), [PLR1702](https://docs.astral.sh/ruff/rules/too-many-nested-blocks/).
+Описание правил: [C901](https://docs.astral.sh/ruff/rules/complex-structure/), [PLR0912](https://docs.astral.sh/ruff/rules/too-many-branches/), [PLR0915](https://docs.astral.sh/ruff/rules/too-many-statements/), [PLR1702](https://docs.astral.sh/ruff/rules/too-many-nested-blocks/).
 
 ### Ruff
 
 Ruff запускается после изменения Python-кода в двух проходах для исходников до и после изменения:
 
-- Глобальные метрики `C901`, `PLR0912` и `PLR1702`: изолированный запуск с лимитами из `pyproject.toml` Harness и preview lint. Настройки целевого проекта и `noqa` не отключают эти ограничения.
+- Глобальные метрики `C901`, `PLR0912`, `PLR0915` и `PLR1702`: изолированный запуск с лимитами из `~/.codex/harness/config/quality.toml` и preview lint. Настройки целевого проекта и `noqa` не отключают эти ограничения.
 - Остальные правила: обычный поиск конфигурации Ruff в целевом проекте. Метрики исключаются из сравнения этого прохода, чтобы не дублировать сообщения и не блокировать улучшение числовых значений.
 
 Лимиты метрик целевого проекта также не заменяют лимиты Harness. Ручной запуск обычного Ruff в целевом проекте продолжает использовать его собственные настройки.
@@ -201,74 +214,48 @@ Harness возвращает её агенту.
 
 ```text
 codex-harness/
+├── src/codex_harness/       # package metadata and default configuration
 ├── checks/
-│   ├── code_quality/
-│   │   ├── __init__.py
-│   │   ├── __main__.py
-│   │   ├── cli.py
-│   │   ├── config.py
-│   │   └── service.py
-│   ├── code_quality.py       # совместимый CLI-launcher
-│   ├── comparison.py
-│   ├── finding.py
-│   ├── python_ruff/
-│   │   ├── __init__.py
-│   │   ├── __main__.py
-│   │   ├── cli.py
-│   │   ├── parsing.py
-│   │   ├── runner.py
-│   │   └── schema.py
-│   ├── python_ruff.py        # совместимый CLI-launcher
-│   ├── regression.py
-│   ├── ruff_metrics/
-│   │   ├── __init__.py
-│   │   ├── config.py
-│   │   ├── normalization.py
-│   │   └── service.py
-│   ├── ruff_regression.py
-│   ├── rules/
-│   │   ├── __init__.py
-│   │   └── function_length.py
-│   └── symbols.py
-│
-├── config/
-│   └── quality.toml
-│
-├── hooks/
-│   ├── pre_tool.py
-│   ├── post_tool.py
-│   └── retry_state.py
-│
-├── state/
-│   └── retry/<scope_hash>/ (attempts.json, patch snapshots, scope.lock)
+│   ├── code_quality/        # combined quality CLI and configuration
+│   ├── function_length/     # CFQ001 normalization
+│   ├── python_flake8/       # isolated Flake8 runner and parser
+│   ├── python_ruff/         # Ruff runner and parser
+│   └── ruff_metrics/        # numeric Ruff metrics
+├── hooks/                   # installed PreToolUse/PostToolUse entry points
+├── tests/
 └── pyproject.toml
 ```
 
-`state/` содержит временные снимки файлов и состояние verification retry; не хранится в Git.
+После установки исполняемый код берётся из Python package и не зависит от clone. Пользовательские данные находятся отдельно:
+
+```text
+~/.codex/harness/
+├── config/quality.toml
+└── state/retry/<scope_hash>/
+```
+
+Отсутствующий `quality.toml` создаётся автоматически из встроенного шаблона. Существующий файл не перезаписывается; отсутствующие в нём параметры получают текущие значения по умолчанию.
 
 ### Ответственность модулей checks
 
-Ruff вычисляет C901 (complexity), PLR0912 (branches), PLR1702 (nesting) и проверяет PLC0415 (imports outside top level). В Harness нет параллельных реализаций этих правил. Три числовые метрики применяются с лимитами Harness; PLC0415, как и остальные обычные правила, выполняется в проходе с конфигурацией целевого проекта.
+Ruff вычисляет C901 (complexity), PLR0912 (branches), PLR0915 (statements), PLR1702 (nesting) и проверяет PLC0415 (imports outside top level). В Harness нет параллельных реализаций этих правил. Четыре числовые метрики применяются с лимитами Harness; PLC0415, как и остальные обычные правила, выполняется в проходе с конфигурацией целевого проекта.
 
 | Модуль | Ответственность |
 | --- | --- |
-| `python_ruff/` | `schema.py` содержит `RuffFinding`; `runner.py` запускает Ruff; `parsing.py` проверяет JSON и нормализует диагностики; `cli.py` отвечает за вывод и exit code. Путь к executable `RUFF` принадлежит runner. |
-| `ruff_metrics/` | `config.py` хранит `CONFIG_PATH`, `METRIC_SETTINGS`, `METRIC_CODES`, читает лимиты и строит CLI options; `normalization.py` связывает диагностики с функциями, разбирает числовые значения и сводит PLR1702; `service.py` выполняет check flow. AST не вычисляет метрики повторно. |
+| `python_flake8/` | Запускает `python -m flake8` из окружения Harness, требует установленный `flake8-functions` и строго разбирает только `CFQ001`. |
+| `function_length/` | Проверяет измерение plugin и связывает диагностику с полным именем функции; собственного подсчёта строк нет. |
+| `python_ruff/` | Запускает `python -m ruff`, проверяет JSON и нормализует диагностики. |
+| `ruff_metrics/` | Читает глобальные лимиты, строит неизменённые Ruff options и нормализует числовые метрики. |
 | `ruff_regression.py` | Чтение снимков и сравнение обычных Ruff-диагностик по коду, сообщению и количеству повторений; исключение метрик, сравниваемых численно. |
-| `finding.py` | Общая числовая диагностика для длины функции и метрик Ruff. |
+| `finding.py` | Общая числовая диагностика для CFQ001 и метрик Ruff. |
 | `comparison.py` | Числовая regression-policy: новая диагностика или рост значения по паре `(rule, symbol)`. |
 | `regression.py` | Применение числовой regression-policy к состоянию файлов до/после; восстановление после синтаксически некорректного baseline. |
 | `symbols.py` | Полные имена функций, методов и вложенных функций для устойчивого сравнения при переносе строк. |
-| `rules/function_length.py` | Единственное custom-правило: физическая длина функции/метода, включая комментарии, пустые строки и docstring. `rules/__init__.py` обозначает пакет правил. |
-| `code_quality/` | `config.py` загружает quality TOML и валидирует retry limit; `service.py` содержит parsing исходника, `SourceSyntaxError` и общий анализ; `cli.py` формирует вывод и exit code. |
+| `code_quality/` | Создаёт и загружает user config, валидирует лимиты, запускает общий анализ и формирует CLI-вывод. |
 
 Несколько диагностик PLR1702 для одной функции сводятся к максимальному значению, уже вычисленному Ruff. Это часть regression-policy: она позволяет сравнивать глубину до/после, не вычисляя вложенность повторно. Числовое сравнение и сравнение обычных диагностик разделены, поскольку у них разные ключи и семантика: улучшение превышенной метрики допускается, а повторения обычных нарушений учитываются по количеству.
 
-Каждый новый package предоставляет публичный API через `__init__.py` с явным `__all__`; бизнес-логики в фасадах нет. Потребители продолжают использовать `from python_ruff import RuffFinding, run_check`, `from ruff_metrics import check, METRIC_CODES` и `from code_quality import analyze_source, load_config, load_max_attempts, SourceSyntaxError`. Внутри packages используются относительные импорты.
-
-`finding.py` остаётся самостоятельной структурой числовой диагностики: отдельный каталог с единственным `schema.py` здесь не добавил бы ответственности. Компактные regression-модули, comparison, symbols и custom-правило также остаются обычными файлами.
-
-Старые команды `python3 checks/code_quality.py ...` и `python3 checks/python_ruff.py ...` сохранены короткими launcher-файлами. Обычный импорт выбирает одноимённый package. Когда `checks/` находится в пути поиска Python, доступны и `python3 -m code_quality ...`, `python3 -m python_ruff ...` через `__main__.py`; они используют тот же CLI.
+Все импорты находятся в namespace `codex_harness`. Для ручного запуска и lifecycle hooks используются установленные console scripts; старые файловые launchers не поддерживаются.
 
 ## Требования
 
@@ -277,7 +264,6 @@ Ruff вычисляет C901 (complexity), PLR0912 (branches), PLR1702 (nesting)
 ```text
 Python 3.12+
 Codex CLI с поддержкой lifecycle hooks
-Ruff
 ```
 
 Проверить Python:
@@ -286,30 +272,30 @@ Ruff
 python3 --version
 ```
 
-Проверить Ruff:
+После установки проверить toolchain:
 
 ```bash
-ruff --version
+python3 -m flake8 --version
+python3 -m ruff --version
 ```
 
-Миграция и тесты проверены с Ruff 0.16.6. Harness использует исполняемый файл `~/.local/bin/ruff`. Числовые значения Ruff сейчас доступны в тексте JSON-диагностики; если его формат изменится, Harness вернёт ошибку анализа, а не пропустит проверку.
+Проверенная комбинация — Flake8 7.3.0, flake8-functions 0.1.0 и Ruff 0.16.6. Совместимые диапазоны записаны в `pyproject.toml`. Harness запускает все инструменты через тот же Python, в который установлен пакет.
 
 ## Установка
 
-Клонировать Harness в глобальную директорию Codex:
+Клонировать исходники в любой временный или постоянный каталог и установить пакет:
 
 ```bash
-mkdir -p ~/.codex
-cd ~/.codex
-
-git clone https://github.com/r-tatarinov/codex-harness.git harness
+git clone https://github.com/r-tatarinov/codex-harness.git
+cd codex-harness
+python3 -m pip install .
 ```
 
-Сделать hooks исполняемыми:
+После установки clone не нужен для выполнения Harness. Найти абсолютные пути console scripts:
 
 ```bash
-chmod +x ~/.codex/harness/hooks/pre_tool.py
-chmod +x ~/.codex/harness/hooks/post_tool.py
+command -v codex-harness-pre-tool
+command -v codex-harness-post-tool
 ```
 
 ## Подключение к Codex
@@ -332,7 +318,7 @@ chmod +x ~/.codex/harness/hooks/post_tool.py
         "hooks": [
           {
             "type": "command",
-            "command": "/home/USER/.pyenv/shims/python3 /home/USER/.codex/harness/hooks/pre_tool.py",
+            "command": "/absolute/path/to/codex-harness-pre-tool",
             "timeout": 10,
             "statusMessage": "Saving code quality baseline"
           }
@@ -345,7 +331,7 @@ chmod +x ~/.codex/harness/hooks/post_tool.py
         "hooks": [
           {
             "type": "command",
-            "command": "/home/USER/.pyenv/shims/python3 /home/USER/.codex/harness/hooks/post_tool.py",
+            "command": "/absolute/path/to/codex-harness-post-tool",
             "timeout": 30,
             "statusMessage": "Checking code quality regression"
           }
@@ -356,13 +342,7 @@ chmod +x ~/.codex/harness/hooks/post_tool.py
 }
 ```
 
-`USER` необходимо заменить на имя пользователя.
-
-Путь до используемого Python можно проверить:
-
-```bash
-which python3
-```
+Пути в примере необходимо заменить результатами `command -v`. Старые команды через `hooks/pre_tool.py` и `hooks/post_tool.py` не поддерживаются.
 
 После изменения `hooks.json` необходимо полностью перезапустить Codex.
 
@@ -389,13 +369,13 @@ PostToolUse    1 installed / 1 active
 
 ## Настройка правил
 
-Ограничения длины функции и количества verification attempts находятся в:
+Все runtime-лимиты находятся в:
 
 ```text
-config/quality.toml
+~/.codex/harness/config/quality.toml
 ```
 
-Текущая конфигурация:
+При отсутствии файла первый hook создаёт его автоматически. Текущие defaults:
 
 ```toml
 [verification]
@@ -403,81 +383,35 @@ max_attempts = 3
 
 [python.functions]
 max_lines = 80
+
+[python.ruff]
+max_complexity = 10
+max_branches = 12
+max_statements = 50
+max_nested_blocks = 4
 ```
 
-Архитектурные проверки и проверки зависимостей между слоями пока не реализованы; неиспользуемая настройка `python.architecture.block_unexpected_module_functions` удалена.
-
-Лимиты Ruff находятся в `pyproject.toml` Harness и применяются hook ко всем проверяемым проектам:
+Чтобы изменить лимит `CFQ001`, отредактировать:
 
 ```toml
-[tool.ruff]
-target-version = "py312"
-
-[tool.ruff.lint]
-extend-select = ["C901", "PLC0415", "PLR0912", "PLR1702"]
-preview = true
-explicit-preview-rules = true
-
-[tool.ruff.lint.mccabe]
-max-complexity = 10
-
-[tool.ruff.lint.pylint]
-max-branches = 12
-max-nested-blocks = 4
-```
-
-Самописных проверок количества statements, arguments и returns в проекте нет. Их аналоги Ruff (`PLR0915`, `PLR0913`, `PLR0911`) не включаются как новые глобальные ограничения. Количество statements не заменяет длину функции в строках.
-
-`preview` задан в секции `tool.ruff.lint`, а не в общей секции `tool.ruff`. Formatter использует стабильный режим. `explicit-preview-rules` требует явного выбора preview-правил; в общем наборе метрик таким правилом является PLR1702.
-
-### max_lines
-
-Максимальная длина функции или метода.
-
-Например:
-
-```toml
+[python.functions]
 max_lines = 120
 ```
 
-увеличит допустимый размер функции до 120 строк.
-
-### max-branches
-
-Максимальное количество ветвлений внутри функции.
-
-```toml
-max-branches = 12
-```
-
-### max-nested-blocks
-
-Максимальная глубина вложенности управляющих конструкций.
-
-```toml
-max-nested-blocks = 4
-```
-
-### max-complexity
-
-Максимально допустимая сложность функции.
-
-```toml
-max-complexity = 10
-```
+Все значения должны быть целыми числами `>= 1`. Существующий файл не переписывается при обновлении Harness; новые отсутствующие ключи используют встроенные defaults. Архитектурные проверки и проверки зависимостей между слоями не изменяются.
 
 ## Ручная проверка файла
 
 Quality rules можно запускать независимо от Codex:
 
 ```bash
-python3 ~/.codex/harness/checks/code_quality.py path/to/file.py
+codex-harness-check path/to/file.py
 ```
 
 Например:
 
 ```bash
-python3 ~/.codex/harness/checks/code_quality.py \
+codex-harness-check \
     project/services/payment.py
 ```
 
@@ -486,17 +420,18 @@ python3 ~/.codex/harness/checks/code_quality.py \
 ```text
 CODE QUALITY CHECK FAILED
 
-- PaymentService.process has 110 lines (maximum 80)
+- CFQ001 PaymentService.process: Function process has length 81 that exceeds max allowed length 80
+- PLR0915 PaymentService.process: Too many statements (63 > 50)
 - C901 PaymentService.process: `process` is too complex (18 > 10)
 ```
 
 Ruff можно проверить отдельно:
 
 ```bash
-python3 ~/.codex/harness/checks/python_ruff.py path/to/file.py
+codex-harness-ruff path/to/file.py
 ```
 
-Эта команда использует настройки целевого проекта. Для всех глобальных ограничений Harness, включая метрики Ruff, используйте `code_quality.py`.
+Эта команда использует настройки целевого проекта. Для всех глобальных ограничений Harness, включая `CFQ001` и метрики Ruff, используйте `codex-harness-check`.
 
 ## Проверка самого Harness
 
@@ -505,9 +440,10 @@ python3 ~/.codex/harness/checks/python_ruff.py path/to/file.py
 ```bash
 ruff check .
 ruff format --check .
+python3 -m unittest discover -v
 ```
 
-Постоянной директории тестов в репозитории нет. При изменении проверок можно выполнять разовые сценарии на исходниках в памяти и во временных каталогах: границы метрик, числовые регрессии и цикл `PreToolUse` / `PostToolUse`.
+Тесты проверяют границу 80/81, числовые regression-сценарии, автоматическое создание конфигурации и полный цикл `PreToolUse` / `PostToolUse` через установленные console scripts.
 
 ## Что происходит при ошибке
 
@@ -525,7 +461,7 @@ Last diagnostics:
 Code quality regression detected.
 
 Quality rules:
-- PaymentService.process has 110 lines (maximum 80)
+- CFQ001 PaymentService.process: Function process has length 81 that exceeds max allowed length 80
 
 Ruff:
 - F401 `os` imported but unused
@@ -580,7 +516,7 @@ Scope — стабильный SHA-256 от JSON-массива `[session_identi
 
 Нарушения Ruff, quality-регрессии и SyntaxError при parsing изменённого source расходуют попытку. Ошибка parsing сохраняет имя файла, строку, колонку и сообщение. Если старый снимок синтаксически некорректен, прежние quality metrics считаются недоступными; исправленный файл проверяется по действующим лимитам. Это позволяет исправить SyntaxError в оставшиеся попытки.
 
-Невозможность запустить checker, timeout (10 секунд на один процесс Ruff), filesystem/permission error, неверная конфигурация, повреждённый retry state, malformed checker response, внутреннее исключение или неопределимый scope блокируют операцию с исходной инфраструктурной диагностикой, сохраняя attempts и `last_failure`. Они не считаются PASS. Тип ошибки определяется структурно; произвольный SyntaxError внутри Harness не считается ошибкой исходника агента.
+Невозможность запустить checker или plugin, timeout (10 секунд на один процесс Ruff или Flake8), filesystem/permission error, неверная конфигурация, повреждённый retry state, malformed checker response, внутреннее исключение или неопределимый scope блокируют операцию с исходной инфраструктурной диагностикой, сохраняя attempts и `last_failure`. Они не считаются PASS. Тип ошибки определяется структурно; произвольный SyntaxError внутри Harness не считается ошибкой исходника агента.
 
 Известное ограничение адаптера: Ruff может вернуть `code: null` для синтаксической ошибки старого снимка. Текущий parser ожидает строковый код и в таком случае возвращает infrastructure failure даже после исправления source. Это существовавшее поведение сохранено при очистке модулей; восстановление после SyntaxError зависит от формата ответа установленного Ruff.
 

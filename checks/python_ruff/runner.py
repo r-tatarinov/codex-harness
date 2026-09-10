@@ -1,12 +1,13 @@
 """Execute Ruff with the selected options and read source files."""
 
 import subprocess
+import sys
 from pathlib import Path
 
 from .parsing import parse_output
 from .schema import RuffFinding
 
-RUFF = Path.home() / ".local" / "bin" / "ruff"
+RUFF_COMMAND = (sys.executable, "-m", "ruff")
 
 
 def run_check(
@@ -17,7 +18,7 @@ def run_check(
     path = path.resolve()
     result = subprocess.run(
         [
-            str(RUFF),
+            *RUFF_COMMAND,
             "check",
             *options,
             "--output-format",

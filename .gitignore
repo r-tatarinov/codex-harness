@@ -4,6 +4,8 @@ state/
 # Python
 __pycache__/
 *.py[cod]
+*.egg-info/
+build/
 
 # Virtual environments
 .venv/
@@ -13,4 +15,3 @@ venv/
 .idea/
 .vscode/
 .DS_Store
-

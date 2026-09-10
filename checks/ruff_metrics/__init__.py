@@ -1,7 +1,7 @@
 """Public API for global Harness metrics measured by Ruff."""
 
 from .config import (
-    CONFIG_PATH,
+    CONFIG_KEYS,
     METRIC_CODES,
     METRIC_SETTINGS,
     build_options,
@@ -11,7 +11,7 @@ from .normalization import MEASUREMENT_RE, collapse_nesting, find_symbol, to_fin
 from .service import check
 
 __all__ = [
-    "CONFIG_PATH",
+    "CONFIG_KEYS",
     "MEASUREMENT_RE",
     "METRIC_CODES",
     "METRIC_SETTINGS",
