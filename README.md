@@ -8,6 +8,10 @@ Rules in prompts, skills, and model instructions still guide Codex, but they are
 
 Ruff and Flake8 are external analyzers connected to the Harness. They produce diagnostics and metrics; they do not define the Harness architecture or decide whether a change is allowed.
 
+## Project status and first release
+
+The package metadata in [pyproject.toml](pyproject.toml) already sets the version to `0.1.0`, but the first public tag/release `v0.1.0` is still planned. [GitHub Releases](https://github.com/r-tatarinov/codex-harness/releases) is currently empty. The first release is planned after cleaning up the obsolete repository-root `config/` described below.
+
 ## Overview and lifecycle
 
 The control path is:
@@ -107,10 +111,13 @@ codex-harness/
 │   ├── python_flake8/       # compatibility re-exports for the former public API
 │   ├── python_ruff/         # compatibility re-exports and Ruff console entry point
 │   └── ruff_metrics/        # numeric Ruff finding normalization
+├── config/quality.toml      # obsolete repository file; pending cleanup
 ├── src/codex_harness/       # package metadata and built-in defaults
-├── tests/                   # policy, adapter, configuration, and hook tests
+│   └── defaults/quality.toml # authoritative packaged default configuration
 └── pyproject.toml
 ```
+
+The repository-root `config/quality.toml` is obsolete and must not be treated as a second current source of truth. The authoritative default template is [src/codex_harness/defaults/quality.toml](src/codex_harness/defaults/quality.toml). The recommended cleanup is to remove the repository-root `config/` directory, or move its file to `examples/legacy-quality.toml` and explicitly label it as a legacy example, not intended for new use. This cleanup concerns the source tree; it does not call for deleting the installed Harness's user configuration below.
 
 After installation, executable code is loaded from the Python package and does not depend on the clone. User data is stored separately:
 
@@ -263,7 +270,7 @@ All tool switches, rules, limits, and supported native options are stored in:
 ~/.codex/harness/config/quality.toml
 ```
 
-If the file is absent, the first hook creates it automatically. The essential default configuration is:
+If the file is absent, the first hook creates it automatically from the packaged default [src/codex_harness/defaults/quality.toml](src/codex_harness/defaults/quality.toml). The current schema uses `schema_version = 1`, `[tools.ruff]`, `[tools.flake8]`, and the related `rules`, `limits`, `options`, verification, and other tool sections in that packaged default. The obsolete repository-root `config/quality.toml` is not a maintained configuration template for new use; it should be removed or retained only as `examples/legacy-quality.toml`, as described above. The essential default configuration is:
 
 ```toml
 schema_version = 1
@@ -375,12 +382,11 @@ This command uses the target project's settings. For all global Harness constrai
 From the repository root:
 
 ```bash
-codex-harness-check checks hooks tests
+codex-harness-check checks hooks
 ruff format --check .
-python3 -m unittest discover -v
 ```
 
-Tests cover the 80/81 boundary, numeric regression scenarios, automatic configuration creation, and the complete `PreToolUse` / `PostToolUse` cycle through the installed console scripts.
+Tests were intentionally removed and are not part of the current public Codex Harness repository. The commands above check code quality and formatting.
 
 ## Block and retry policy
 
@@ -461,7 +467,7 @@ Known adapter limitation: Ruff may return `code: null` for a syntax error in an 
 
 The installed Codex schemas include `agent_id`/`agent_type`, but do not provide the root user turn identifier in tool hooks. When this explicit agent metadata is present, the Harness blocks the patch as an infrastructure failure without a separate retry budget. Equality between parent and subagent `turn_id` values is not assumed; the relationship is not inferred from PID, time, or transcript.
 
-Limitation: **a shared retry budget for subagents is not supported without a reliable root turn identifier**. Checking the built-in schema does not mean that a live end-to-end subagent test has been performed.
+Limitation: **a shared retry budget for subagents is not supported without a reliable root turn identifier**. Inspecting the built-in schema alone does not establish that live end-to-end subagent behavior has been verified.
 
 Retries are formed by the agent's own sequence of tool calls. The Harness does not run an LLM, retry agent, custom agent loop, or final verification gate.
 
@@ -485,7 +491,7 @@ Also not yet implemented:
 - dependency rules between application layers;
 - JavaScript / TypeScript / Vue checks;
 - a final `Stop` quality gate;
-- automatic tests and project-wide checks before task completion;
+- project-wide checks before task completion;
 - semantic review of complex architectural changes.
 
 ## Roadmap
@@ -502,7 +508,6 @@ OOP / architecture rules
 Stop hook
         |
         +-- final check before task completion
-        +-- tests
         +-- typing
         +-- project-wide checks
 
