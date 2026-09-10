@@ -4,13 +4,13 @@
 
 Codex Harness is a local change-control system around Codex. It captures the state before an edit, analyzes the result, compares the two sets of findings, and allows or blocks the workflow according to a deterministic policy.
 
-Rules in prompts, skills, and model instructions still guide Codex, but they are not the enforcement boundary. The Harness owns that boundary: lifecycle integration, baselines, analyzer orchestration, regression decisions, retry limits, and—through dedicated checkers—the architectural rules that can be enforced independently of the model.
+Prompts, skills, and model instructions guide Codex. Harness enforces the implemented checks through lifecycle hooks, baselines, analyzer orchestration, regression decisions, and retry limits. Automated architectural and application-layer dependency checks remain roadmap items.
 
-Ruff and Flake8 are external analyzers connected to the Harness. They produce diagnostics and metrics; they do not define the Harness architecture or decide whether a change is allowed.
+Harness connects Ruff, Flake8, Pylint, Black, and MyPy as external analyzers. They produce diagnostics and metrics; Harness decides whether those findings represent a regression.
 
-## Project status and first release
+## Project version and releases
 
-The package metadata in [pyproject.toml](pyproject.toml) already sets the version to `0.1.0`, but the first public tag/release `v0.1.0` is still planned. [GitHub Releases](https://github.com/r-tatarinov/codex-harness/releases) is currently empty. The first release is planned after cleaning up the obsolete repository-root `config/` described below.
+The package version is `0.1.0`, as recorded in [pyproject.toml](pyproject.toml). Published versions are listed on [GitHub Releases](https://github.com/r-tatarinov/codex-harness/releases).
 
 ## Overview and lifecycle
 
@@ -40,7 +40,7 @@ apply_patch changes files
 PostToolUse hook
   +-- run connected analyzers on BEFORE and AFTER
   +-- normalize metrics and diagnostics as findings
-  +-- apply the active checker and regression policies
+  +-- apply the shared regression policy
           |
           v
 Regression comparison
@@ -65,29 +65,29 @@ worsening existing code  = regression
 
 For example, an unchanged function with 63 statements is allowed, while increasing it from 63 to 70 is a regression. A newly added function that immediately exceeds a limit is also a regression.
 
-Numeric metrics (`CFQ001`, `C901`, `PLR0912`, `PLR0915`, and `PLR1702`) are compared by rule and fully qualified function name. A new violation or an increased value is blocked. Reducing an existing excess, such as 82 to 81 lines with a limit of 80, is allowed. Moving a function to other lines does not create a regression.
+Numeric metrics (`CFQ001`, `C901`, `PLR0912`, `PLR0915`, and `PLR1702`) are compared by file, analyzer, rule, and fully qualified function name. A new over-limit metric or an increased value is blocked. Reducing an existing excess, such as 82 to 81 lines with a limit of 80, is allowed. Moving a function to other lines within the same file does not create a regression.
 
-Regular analyzer diagnostics are compared by code, message, and occurrence count. An existing `F401` remains baseline; an additional `F401` is a regression. Syntax errors in changed source are treated as code failures. Infrastructure failures fail closed but do not consume the code-correction retry budget.
+Regular analyzer diagnostics are compared by file, analyzer, code, message, and occurrence count. An existing `F401` remains baseline; an additional occurrence of the same diagnostic is a regression. Debt in one file or analyzer cannot offset a new violation in another. Syntax errors in changed source are treated as code failures. Infrastructure failures fail closed but do not consume the code-correction retry budget.
 
 ## Tools, analyzers, and findings
 
-The Harness defines which measurements are mandatory and how their findings are compared. External analyzers calculate the measurements:
+The configuration determines which analyzers and rules run. Ruff and Flake8 are enabled by default and provide the following numeric metrics:
 
 | Metric | Rule | Analyzer | Default limit |
 | --- | --- | --- | ---: |
-| Physical function length | `CFQ001` | Flake8 + `flake8-functions` | `max_lines = 80` |
-| Function complexity | `C901` | Ruff | `max_complexity = 10` |
-| Branches | `PLR0912` | Ruff | `max_branches = 12` |
-| Statements | `PLR0915` | Ruff | `max_statements = 50` |
-| Nested blocks | `PLR1702` | Ruff | `max_nested_blocks = 4` |
+| Physical function length | `CFQ001` | Flake8 + `flake8-functions` | `80` |
+| Function complexity | `C901` | Ruff | `10` |
+| Branches | `PLR0912` | Ruff | `12` |
+| Statements | `PLR0915` | Ruff | `50` |
+| Nested blocks | `PLR1702` | Ruff | `4` |
 
 These rules measure different properties. In particular, physical lines and statements are independent: blank lines and comments can affect `CFQ001`, but they are not statements for `PLR0915`. Rule semantics remain those of the analyzer; the Harness does not maintain parallel implementations.
 
-Flake8 runs in an isolated Harness pass for `CFQ001`. The `flake8-functions` plugin supplies the measured length, and the Harness associates it with a fully qualified function name. The target project's Flake8 configuration and `noqa` do not disable this global constraint.
+When `CFQ001` is selected, Flake8 runs it in an isolated Harness pass. The `flake8-functions` plugin supplies the measured length, and Harness associates it with a fully qualified function name. The target project's Flake8 configuration and `noqa` do not disable this selected metric.
 
-Ruff supplies the other four numeric metrics in an isolated pass with limits from `~/.codex/harness/config/quality.toml`; lint preview is enabled for that pass. A second Ruff pass discovers the target project's normal configuration and reports its other enabled rules, such as `F401` or `PLC0415`. Harness metrics are excluded from the second comparison to avoid duplicate findings. The target project's metric limits do not replace the Harness limits, and a regular manual Ruff run continues to use the project's own settings.
+When Ruff is enabled, it supplies the other four numeric metrics in an isolated pass with limits from `~/.codex/harness/config/quality.toml`; lint preview is enabled for that pass. A separate regular pass follows `use_project_config` and the configured rule selectors. By default, it uses the project's settings and adds `PLC0415`. Numeric findings are compared only once. Project metric limits do not replace Harness limits, while a direct manual Ruff run uses the project's own settings.
 
-Ruff, Flake8, Pylint, Black, and MyPy all implement one analyzer interface. The registry selects only tools whose `enabled` flag is true. Adapters own process invocation and tool-specific parsing; the orchestrator and lifecycle hooks see only normalized findings. This keeps external rule implementations in their original tools and allows another analyzer to be added without changing either hook.
+Ruff, Flake8, Pylint, Black, and MyPy implement one analyzer interface. Only tools whose `enabled` flag is true run. Adapters own process invocation and tool-specific parsing; orchestration and hooks work with normalized findings. Another analyzer can be added without changing either hook.
 
 Pylint and MyPy diagnostics use the same occurrence-count regression policy as ordinary Ruff diagnostics. Black runs only in formatting-check mode and never changes source; a file that was already unformatted remains baseline, while a newly introduced formatting regression is blocked.
 
@@ -111,13 +111,13 @@ codex-harness/
 │   ├── regression.py       # shared occurrence and numeric regression policy
 │   ├── storage.py          # atomic file persistence
 │   └── symbols.py          # qualified symbol identities
-├── config/quality.toml      # obsolete repository file; pending cleanup
+├── config/quality.toml      # repository copy of configuration
 ├── src/codex_harness/       # package metadata and built-in defaults
 │   └── defaults/quality.toml # authoritative packaged default configuration
 └── pyproject.toml
 ```
 
-The repository-root `config/quality.toml` is obsolete and must not be treated as a second current source of truth. The authoritative default template is [src/codex_harness/defaults/quality.toml](src/codex_harness/defaults/quality.toml). The recommended cleanup is to remove the repository-root `config/` directory, or move its file to `examples/legacy-quality.toml` and explicitly label it as a legacy example, not intended for new use. This cleanup concerns the source tree; it does not call for deleting the installed Harness's user configuration below.
+The authoritative default template is [src/codex_harness/defaults/quality.toml](src/codex_harness/defaults/quality.toml), which is included in the package. The repository-root `config/quality.toml` is a separate copy, not the installation template. Runtime configuration is read from the user path below, regardless of where the repository was cloned.
 
 After installation, executable code is loaded from the Python package and does not depend on the clone. User data is stored separately:
 
@@ -268,7 +268,7 @@ All tool switches, rules, limits, and supported native options are stored in:
 ~/.codex/harness/config/quality.toml
 ```
 
-If the file is absent, the first hook creates it automatically from the packaged default [src/codex_harness/defaults/quality.toml](src/codex_harness/defaults/quality.toml). The current schema uses `schema_version = 1`, `[tools.ruff]`, `[tools.flake8]`, and the related `rules`, `limits`, `options`, verification, and other tool sections in that packaged default. The obsolete repository-root `config/quality.toml` is not a maintained configuration template for new use; it should be removed or retained only as `examples/legacy-quality.toml`, as described above. The essential default configuration is:
+If the user configuration is absent, the first configuration load creates it from the packaged default [src/codex_harness/defaults/quality.toml](src/codex_harness/defaults/quality.toml). Schema version `1` stores the retry limit under `[verification]` and analyzer settings under `[tools.<name>]`, with `rules`, `limits`, and `options` subsections. The essential default configuration is:
 
 ```toml
 schema_version = 1
@@ -338,13 +338,15 @@ Set a tool's `enabled` value to activate or deactivate it. To change the `CFQ001
 CFQ001 = 120
 ```
 
-With `use_project_config = true`, the analyzer discovers its normal project configuration and Harness `rules`, `limits`, and `options` take precedence. With `false`, the adapter uses an isolated tool configuration. Unknown tools, rules, plugins, options, incorrect types, and invalid positive limits fail closed with a configuration path in the error. Harness does not reimplement any external rule.
+With `use_project_config = true`, the analyzer discovers its normal project configuration; explicitly supplied Harness rules and options take precedence. With `false`, the adapter uses an isolated tool configuration. Numeric metric passes remain isolated in either case and use Harness limits. Unknown settings, invalid types, unavailable configured plugins, and tool-rejected rules or options cause a verification failure. Configuration validation reports the parameter path; errors from external tools retain their diagnostics.
 
-Ruff and Flake8 accept `select`/`extend_select`/`ignore` rule selectors, Pylint accepts `enable`/`disable`, and MyPy accepts `enable_error_code`/`disable_error_code`. Supported `options` cover Python targets, line and complexity limits, formatter modes, and the common MyPy strictness switches; reserved process/output/write options remain controlled by Harness.
+Ruff accepts `select`, `extend_select`, and `ignore`; Flake8 accepts `select` and `ignore`; Pylint accepts `enable` and `disable`; MyPy accepts `enable_error_code` and `disable_error_code`. Supported `options` cover Python targets, line and complexity limits, formatter modes, and MyPy strictness switches. Harness controls process, output, and write options.
+
+Each analyzer has a `timeout_seconds` setting, defaulting to `10` seconds per process. This is separate from the hook timeouts in `hooks.json`.
 
 ## Checking a file manually
 
-The combined Harness analysis can be run independently of Codex:
+The combined Harness analysis can be run independently of Codex. The command accepts one or more Python-file paths and reports current findings from the enabled analyzers; it does not compare against a snapshot:
 
 ```bash
 codex-harness-check path/to/file.py
@@ -361,10 +363,9 @@ If limits are violated:
 
 ```text
 CODE QUALITY CHECK FAILED
-
-- payment.py:10:1: [flake8] CFQ001 Function process has length 81 that exceeds max allowed length 80
-- payment.py:10:1: [ruff] PLR0915 Too many statements (63 > 50)
-- payment.py:10:1: [ruff] C901 `process` is too complex (18 > 10)
+- /project/services/payment.py:1:1: [ruff] F401 `os` imported but unused
+- /project/services/payment.py:10:1: [ruff] PLR0915 Too many statements (63 > 50)
+- /project/services/payment.py:10:5: [flake8] CFQ001 Function process has length 81 that exceeds max allowed length 80
 ```
 
 The Ruff analyzer adapter can also be run separately:
@@ -375,16 +376,20 @@ codex-harness-ruff path/to/file.py
 
 This command uses the target project's settings. For all global Harness constraints, including `CFQ001` and Ruff metrics, use `codex-harness-check`.
 
+Both commands exit with `0` when no findings are reported and with `1` when findings or execution errors occur.
+
 ## Checking the Harness itself
 
-From the repository root:
+After installing the current checkout as described under Installation, run these commands from the repository root:
 
 ```bash
-codex-harness-check checks hooks
-ruff format --check .
+find checks hooks src -type f -name '*.py' -exec codex-harness-check {} +
+python3 -m ruff check checks hooks src
+python3 -m black --check --target-version py312 checks hooks src
+python3 -m mypy --check-untyped-defs --follow-untyped-imports -p codex_harness
 ```
 
-Tests were intentionally removed and are not part of the current public Codex Harness repository. The commands above check code quality and formatting.
+These commands check the Python sources, formatting, and types without changing source files. The `find` command passes individual files because `codex-harness-check` does not traverse directories. Harness uses the active user configuration. MyPy checks the installed `codex_harness` package with its resolved package structure; reinstall the current checkout after source changes. Use the same Python environment for `python3` and the installed console scripts.
 
 ## Block and retry policy
 
@@ -401,18 +406,19 @@ Verification attempt 1/3
 Last diagnostics:
 Code quality regression detected.
 
-Quality rules:
-- CFQ001 PaymentService.process: Function process has length 81 that exceeds max allowed length 80
+ruff:
+- /project/services/payment.py:1:1: F401 `os` imported but unused
+- /project/services/payment.py:10:1: PLR0915 Too many statements (63 > 50) [PaymentService.process: 63 > 50]
 
-Ruff:
-- F401 `os` imported but unused
+flake8:
+- /project/services/payment.py:10:5: CFQ001 Function process has length 81 that exceeds max allowed length 80 [PaymentService.process: 81 > 80]
 ```
 
 The agent then receives the specific diagnostic through `reason` and `additionalContext` and can fix the code in the next iteration while the current turn's budget remains available.
 
 ### Consecutive verification FAIL limit
 
-`[verification] max_attempts = 3` means at most three consecutive unsuccessful correction attempts within one user turn. If the parameter is absent, `3` is used. Only integers `>= 1` are accepted; booleans, strings, and fractional values are invalid. The parameter is read by the existing TOML loader.
+`max_attempts = 3` in the `[verification]` section allows at most three consecutive failed code-correction attempts within one user turn. If omitted, the default is `3`. Only integers `>= 1` are accepted; booleans, strings, and fractional values are invalid.
 
 ```text
 turn A
@@ -455,17 +461,17 @@ State from previous turns is transient runtime state: it does not participate in
 
 ### Code failure and infrastructure failure
 
-Analyzer-reported code violations, quality regressions, and SyntaxError while parsing changed source consume an attempt. A parsing error preserves the file name, line, column, and message. If the old snapshot is syntactically invalid, the previous quality metrics are considered unavailable; the corrected file is checked against the active limits. This makes it possible to fix a SyntaxError with the remaining attempts.
+New or worsened findings reported by analyzers, including syntax errors in changed source, consume a correction attempt. Diagnostics include the file, line, column, and message. If the old snapshot is syntactically invalid, previous numeric metrics are unavailable; the corrected source is checked against the active limits. Fixing the syntax error is allowed when it introduces no other regressions.
 
-An inability to start a checker or plugin, a timeout (10 seconds per Ruff or Flake8 process), a filesystem or permission error, invalid configuration, corrupted retry state, malformed checker response, internal exception, or indeterminate scope blocks the operation with the original infrastructure diagnostic while preserving attempts and `last_failure`. These outcomes are not considered PASS. Error types are determined structurally; an arbitrary SyntaxError inside the Harness is not treated as an agent source-code error.
+An inability to start an analyzer or plugin, a process timeout, a filesystem or permission error, invalid configuration, corrupted retry state, malformed analyzer output, an internal exception, or an indeterminate scope blocks the operation with an infrastructure diagnostic while preserving attempts and `last_failure`. These outcomes are not PASS. Source syntax errors are classified inside adapters; an arbitrary `SyntaxError` inside Harness remains an infrastructure failure.
 
-Known adapter limitation: Ruff may return `code: null` for a syntax error in an old snapshot. The current parser expects a string code and, in that case, returns an infrastructure failure even after the source is fixed. This pre-existing behavior was preserved during module cleanup; recovery after a SyntaxError depends on the response format of the installed Ruff version.
+Ruff syntax diagnostics with `code: null` and `name: "invalid-syntax"` are normalized as syntax findings. This response format does not by itself prevent recovery from an invalid baseline.
 
 ### Subagents
 
-The installed Codex schemas include `agent_id`/`agent_type`, but do not provide the root user turn identifier in tool hooks. When this explicit agent metadata is present, the Harness blocks the patch as an infrastructure failure without a separate retry budget. Equality between parent and subagent `turn_id` values is not assumed; the relationship is not inferred from PID, time, or transcript.
+When a hook payload contains `agent_id` or `agent_type`, the current Harness implementation blocks the patch as an infrastructure failure. It does not allocate a separate retry budget or infer the relationship between parent and subagent turns from PID, time, or transcript.
 
-Limitation: **a shared retry budget for subagents is not supported without a reliable root turn identifier**. Inspecting the built-in schema alone does not establish that live end-to-end subagent behavior has been verified.
+A shared retry budget for subagents requires a reliable root user turn identifier and is not implemented. This is a limitation of the current Harness integration.
 
 Retries are formed by the agent's own sequence of tool calls. The Harness does not run an LLM, retry agent, custom agent loop, or final verification gate.
 
