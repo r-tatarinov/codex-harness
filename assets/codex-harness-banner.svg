@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="320" viewBox="0 0 1200 320" role="img" aria-labelledby="title description">
+  <title id="title">Codex Harness</title>
+  <desc id="description">AI coding agent changes flow through deterministic guardrails into controlled code quality.</desc>
+  <rect width="1200" height="320" rx="24" fill="#0d1117"/>
+  <path d="M72 160H1128" stroke="#30363d" stroke-width="2"/>
+  <g fill="none" stroke="#8b949e" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M108 113h128l48 47-48 47H108l-48-47 48-47Z"/>
+    <path d="m115 144-17 16 17 16M153 176l17-16-17-16M140 134l-14 52"/>
+  </g>
+  <path d="M304 160h112" stroke="#58a6ff" stroke-width="4" stroke-linecap="round"/>
+  <path d="m399 143 17 17-17 17" fill="none" stroke="#58a6ff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <g fill="none" stroke="#58a6ff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="438" y="64" width="324" height="192" rx="18"/>
+    <path d="M490 105v110M710 105v110"/>
+    <path d="M490 128h56l28 32-28 32h-56M710 128h-56l-28 32 28 32h56" opacity=".65"/>
+  </g>
+  <g fill="none" stroke="#3fb950" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M784 160h112"/>
+    <path d="m879 143 17 17-17 17"/>
+    <rect x="918" y="98" width="222" height="124" rx="18"/>
+    <path d="m974 160 28 27 55-59"/>
+  </g>
+  <g fill="#8b949e" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="17" font-weight="600" letter-spacing="2" text-anchor="middle">
+    <text x="172" y="254">AGENT CHANGE</text>
+    <text x="600" y="292" fill="#58a6ff">HARNESS</text>
+    <text x="1029" y="254" fill="#3fb950">CONTROLLED QUALITY</text>
+  </g>
+</svg>

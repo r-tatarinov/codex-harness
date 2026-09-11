@@ -4,11 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "codex-harness"
-version = "0.1.0"
+version = "0.1.1"
 description = "Deterministic code-quality hooks for Codex"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.12"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+]
 dependencies = [
     "black>=26,<27",
     "flake8>=7.3,<8",

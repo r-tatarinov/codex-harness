@@ -1,6 +1,21 @@
-**English** | [Русский](README.ru.md)
+<p align="center">
+  <img src="https://raw.githubusercontent.com/r-tatarinov/codex-harness/master/assets/codex-harness-banner.svg" alt="Codex Harness: AI coding agent changes pass through deterministic guardrails to controlled code quality" width="900">
+</p>
 
-# Codex Harness
+<h1 align="center">Codex Harness</h1>
+
+<p align="center">Deterministic guardrails for AI-generated code.</p>
+
+<p align="center">
+  <a href="https://pypi.org/project/codex-harness/"><img src="https://img.shields.io/pypi/v/codex-harness" alt="PyPI version"></a>
+  <a href="https://pypi.org/project/codex-harness/"><img src="https://img.shields.io/pypi/pyversions/codex-harness" alt="Python versions"></a>
+  <a href="https://github.com/r-tatarinov/codex-harness/blob/master/LICENSE"><img src="https://img.shields.io/pypi/l/codex-harness" alt="License"></a>
+</p>
+
+<p align="center">
+  <strong><a href="https://github.com/r-tatarinov/codex-harness/blob/master/README.md">English</a></strong> |
+  <a href="https://github.com/r-tatarinov/codex-harness/blob/master/README.ru.md">Русский</a>
+</p>
 
 Codex Harness is a local change-control system around Codex. It captures the state before an edit, analyzes the result, compares the two sets of findings, and allows or blocks the workflow according to a deterministic policy.
 
@@ -10,7 +25,7 @@ Harness connects Ruff, Flake8, Pylint, Black, and MyPy as external analyzers. Th
 
 ## Project version and releases
 
-The package version is `0.1.0`, as recorded in [pyproject.toml](pyproject.toml). Published versions are listed on [GitHub Releases](https://github.com/r-tatarinov/codex-harness/releases).
+The package version is `0.1.1`, as recorded in [pyproject.toml](https://github.com/r-tatarinov/codex-harness/blob/master/pyproject.toml). Published versions are listed on [GitHub Releases](https://github.com/r-tatarinov/codex-harness/releases).
 
 ## Overview and lifecycle
 
