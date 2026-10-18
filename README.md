@@ -462,13 +462,13 @@ Last diagnostics:
 
 One attempt is consumed by one patch that actually changes Python code and has an overall FAIL result, regardless of the number of files, rules, or diagnostics. Changing the failure reason, for example from PLC0415 to F401, does not start a separate budget.
 
-A relevant PASS immediately deletes the current scope's `attempts.json`: `FAIL → FAIL → PASS → FAIL` produces `1/3 → 2/3 → reset → 1/3`. PASS preserves the existing semantics of having no new regressions relative to the snapshot before the patch; it does not require all old technical debt to be eliminated. A change only to README or another unchecked file, a no-op Python patch, a repeated hook, and regular agent actions neither consume nor reset the budget. Checks run only when the contents or existence of a tracked Python file change.
+A relevant PASS atomically resets the current scope's failure count and diagnostics: `FAIL → FAIL → PASS → FAIL` produces `1/3 → 2/3 → reset → 1/3`. PASS preserves the existing semantics of having no new regressions relative to the snapshot before the patch; it does not require all old technical debt to be eliminated. A change only to README or another unchecked file, a no-op Python patch, a repeated hook, and regular agent actions neither consume nor reset the budget. Checks run only when the contents or existence of a tracked Python file change.
 
 ### Scope and state
 
 The scope is a stable SHA-256 hash of the JSON array `[session_identifier, resolved_cwd, turn_id]`. `session_id` from the payload is used; if it is absent, `CODEX_THREAD_ID` is used, followed by `CODEX_SESSION_ID`. A non-empty valid `turn_id` from the payload is required for the turn: there is no session-wide or global fallback. A new turn receives a different directory without deleting the previous turn's state. Different sessions and working directories are isolated as well.
 
-`state/retry/<scope_hash>/attempts.json` contains only `consecutive_failed_attempts` and `last_failure`. Snapshots are stored in the same directory; their names are derived from `tool_use_id`, which is not part of the retry scope. The new mechanism does not use legacy snapshots stored directly in `state/`.
+`state/retry/<scope_hash>/attempts.json` stores a versioned retry state and operation receipts. Existing `consecutive_failed_attempts` and `last_failure` values are preserved when reading the previous format. A successful comparison resets these fields while retaining receipts for redelivery. Snapshots are stored in the same directory; their names are derived from `tool_use_id`, which is not part of the retry scope. The new mechanism does not use legacy snapshots stored directly in `state/`.
 
 Operations are protected by a per-scope file lock; JSON is written through a temporary file and an atomic replace. The post-hook claims a snapshot by renaming it before verification and deletes it before saving the result. Repeated or concurrent delivery of the same PostToolUse does not run verification again or increment the counter. If the process is interrupted, a `.processing` file may remain; it is not processed again.
 
@@ -489,6 +489,77 @@ When a hook payload contains `agent_id` or `agent_type`, the current Harness imp
 A shared retry budget for subagents requires a reliable root user turn identifier and is not implemented. This is a limitation of the current Harness integration.
 
 Retries are formed by the agent's own sequence of tool calls. The Harness does not run an LLM, retry agent, custom agent loop, or final verification gate.
+
+## Hook installation diagnostics and execution results
+
+Use the installed `codex-harness-pre-tool` and `codex-harness-post-tool` console scripts. Their interpreter belongs to the environment where Harness was installed; the checkout and current working directory are not required. Direct execution of hook `.py` files is unsupported. No `PYTHONPATH` or `sys.path` adjustment is needed.
+
+Run diagnostics using the same environment as the configured scripts:
+
+```bash
+codex-harness doctor
+codex-harness doctor --cwd /absolute/path/to/project --json
+```
+
+Doctor inspects installed entry points, imports and packaged defaults, discoverable global/project/system configuration files, command paths, matchers, duplicate Harness registrations, disabled hooks, asynchronous handlers, and local storage. It executes only the installed Harness scripts, never arbitrary shell commands from user configuration. Its temporary project smoke captures a baseline, verifies a change, detects a regression, checks redelivery, and exercises blocking responses with an isolated home directory. It does not modify user hook definitions or migrate the user's quality configuration.
+
+A locally healthy installation can produce:
+
+```text
+Package          PASS
+Entry points     PASS
+PreToolUse       PASS
+PostToolUse      PASS
+Hook protocol   PASS
+Configuration   PASS
+State storage   PASS
+Runtime smoke   PASS
+Trust           UNKNOWN
+Result: UNKNOWN
+```
+
+Exit codes are `0` for a fully confirmed report, `1` for a detected error, and `2` for incomplete confirmation. The current doctor cannot confirm an active Codex session's hook trust, profiles, managed/plugin sources or configuration overrides, so it reports `Trust UNKNOWN` and does not claim end-to-end activation. Review the exact definitions and project trust through `/hooks`. A stored trust hash alone is not sufficient evidence. Configurations from multiple sources are additive; adding correct hooks does not remove old registrations. Inline `[hooks]` tables in `config.toml` are also inspected.
+
+Mandatory gates must run synchronously: omit `async` or set it to `false`. Keep hook process timeouts large enough for both baseline and changed-source analysis across all affected files. A process killed by Codex's timeout cannot reliably deliver Harness's blocking response. Doctor validates positive timeout values but cannot establish a safe upper bound for an arbitrary patch.
+
+Execution outcomes are distinct:
+
+| Result | Meaning |
+| --- | --- |
+| `PREPARED` | PreToolUse captured the baseline; verification is still pending. |
+| `PASS` | PostToolUse completed before/after comparison without new regressions. |
+| `CHECK_FAILED` | Code regression detected, or the existing retry budget prohibits another patch. |
+| `HARNESS_ERROR` | Startup, input, configuration, storage or verification failed. |
+| `NOT_APPLICABLE` | The hook executed, but no enabled check applies or no Python content changed. |
+| `UNKNOWN` | No trustworthy evidence of execution is available. |
+
+Statuses appear in supported hook response context. Bootstrap loads internal components inside the exception boundary. PreToolUse infrastructure failures return `permissionDecision: "deny"`; PostToolUse failures return `decision: "block"`. JSON responses use exit code `0`; if JSON delivery fails, the bootstrap attempts stderr feedback and exit code `2`. PostToolUse cannot undo tool side effects, and its blocking feedback is not a guarantee that Codex stops the agent.
+
+Operation receipts are bound to the existing session/cwd/turn scope, tool-use identifier, command and verification settings. File fingerprints protect replay from being mistaken for validation of changed content. Receipts contain no complete input events or extra source copies. Retry changes and the completed receipt are committed together after snapshot consumption. Infrastructure errors preserve the failure count and last code diagnostics. Errors are recorded when storage and runtime remain usable; otherwise the blocking response is the available evidence and persistence remains unconfirmed.
+
+Duplicate PreToolUse events do not recapture the baseline. Duplicate PostToolUse events reuse the confirmed result without charging a second attempt. Missing, mismatched or damaged required snapshots and receipts fail closed. Interrupted `.processing` files are not replayed. After an interrupted or failed verification, use a new operation identifier; never manufacture a PASS from a missing snapshot. Existing retry state is read compatibly, but snapshots created by an older process without a corresponding preparation receipt cannot establish verification under the new version.
+
+If Codex never launches the process, skips an untrusted hook, uses an uncovered tool path, or terminates Python before its handler can respond, Harness cannot enforce a global fail-closed guarantee. Independent installation diagnostics and execution evidence must remain distinct from a project test suite passing. See the [Codex hook contract](https://learn.chatgpt.com/docs/hooks).
+
+### Migrating an old installation
+
+1. Install the updated package into the intended Python environment with `python3 -m pip install --upgrade .` from the updated checkout, or install its built wheel.
+2. Find both script paths with `command -v codex-harness-pre-tool` and `command -v codex-harness-post-tool`.
+3. Back up your Codex configuration and replace only the old Harness commands with those absolute paths. Remove duplicate legacy registrations across `hooks.json` and inline TOML; preserve unrelated hooks.
+4. Restart Codex, review and trust the changed definitions in `/hooks`, then run `codex-harness doctor` from the installed environment.
+
+No automatic rewrite of user configuration is performed.
+
+### Installed-wheel integration checks
+
+The regression suite uses Python's standard-library `unittest`. In a disposable development environment with the build frontend and backend installed, run:
+
+```bash
+python -m pip install build 'setuptools>=77'
+python -m unittest discover -s tests -v
+```
+
+The suite builds a wheel from a clean temporary source copy, installs it and its dependencies into a fresh venv, removes the source copy, and exercises real console scripts from unrelated working directories. Temporary homes isolate quality configuration and runtime state. Fault injection changes only the temporary installed package. Wheel artifacts are retained under the reported temporary directory for inspection. These are subprocess integration checks, not a Codex CLI end-to-end test. Real Codex lifecycle validation requires an available model and an isolated, reviewed hook configuration.
 
 ## Current limitations
 

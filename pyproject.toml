@@ -23,6 +23,7 @@ dependencies = [
 ]
 
 [project.scripts]
+codex-harness = "codex_harness.cli:main"
 codex-harness-check = "codex_harness.checks.code_quality:main"
 codex-harness-ruff = "codex_harness.checks.analyzers.ruff.cli:main"
 codex-harness-pre-tool = "codex_harness.hooks.pre_tool:main"
@@ -31,6 +32,7 @@ codex-harness-post-tool = "codex_harness.hooks.post_tool:main"
 [tool.setuptools]
 packages = [
     "codex_harness",
+    "codex_harness.doctor",
     "codex_harness.checks",
     "codex_harness.checks.analyzers",
     "codex_harness.checks.analyzers.black",

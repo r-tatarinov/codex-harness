@@ -3,9 +3,11 @@ import hashlib
 import json
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
+from dataclasses import asdict
 from pathlib import Path
 
 from ..checks.storage import AtomicFile
+from .parsing import parse_attempts
 from .schema import AttemptState
 from .validation import identifier
 
@@ -35,28 +37,10 @@ class RetryScope:
             state = self._attempts.read_json()
         except FileNotFoundError:
             return AttemptState()
-        if not isinstance(state, dict):
-            raise TypeError("Invalid retry state: expected an object")
-        count = state.get("consecutive_failed_attempts")
-        if type(count) is not int or count < 0:
-            raise ValueError("Invalid retry state: consecutive_failed_attempts")
-        failure = state["last_failure"]
-        if count > 0:
-            identifier(failure, "retry state last_failure")
-        elif failure is not None and not isinstance(failure, str):
-            raise ValueError("Invalid retry state: last_failure")
-        return AttemptState(count, failure)
+        return parse_attempts(state, self.path.name)
 
     def save(self, state: AttemptState) -> None:
-        self._attempts.write_json(
-            {
-                "consecutive_failed_attempts": state.consecutive_failed_attempts,
-                "last_failure": state.last_failure,
-            }
-        )
-
-    def reset(self) -> None:
-        self._attempts.path.unlink(missing_ok=True)
+        self._attempts.write_json({"schema_version": 2, **asdict(state)})
 
 
 class RetryStore:

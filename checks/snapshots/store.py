@@ -63,6 +63,10 @@ class SnapshotStore:
     def consume(self, path: Path) -> Iterator[Path | None]:
 
         claimed = path.with_suffix(".processing")
+        if claimed.exists():
+            raise ValueError(
+                "Interrupted snapshot verification requires a new operation"
+            )
         try:
             path.replace(claimed)
         except FileNotFoundError:

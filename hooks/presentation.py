@@ -1,5 +1,5 @@
 from ..checks.analyzers.schema import ToolFinding
-from .schema import AttemptState
+from .schema import AttemptState, HookResult
 
 
 def deny_response(reason: str) -> dict:
@@ -50,3 +50,19 @@ def failure_reason(state: AttemptState, maximum: int) -> str:
         lines.append("Retry limit reached for the current turn.")
     lines.extend(("", "Last diagnostics:", state.last_failure or ""))
     return "\n".join(lines)
+
+
+def result_response(event_name: str, result: HookResult) -> dict:
+    reason = f"{result.status}: {result.reason}"
+    if result.blocked:
+        return (
+            deny_response(reason)
+            if event_name == "PreToolUse"
+            else block_response(reason)
+        )
+    return {
+        "hookSpecificOutput": {
+            "hookEventName": event_name,
+            "additionalContext": reason,
+        }
+    }

@@ -1,44 +1,49 @@
+import importlib
 import json
-import os
 import sys
-
-from ..checks.analyzers.orchestrator import AnalyzerOrchestrator
-from ..checks.analyzers.registry import BUILTIN_ANALYZERS
-from ..checks.config import (
-    CONFIG_PATH,
-    HARNESS_ROOT,
-)
-from ..checks.config.loader import ConfigurationLoader
-from ..checks.regression import DefaultRegressionPolicy
-from ..checks.snapshots import SnapshotChecker, SnapshotStore
-from .presentation import block_response
-from .retry_state import RetryStore
-from .verification import PostToolHook
 
 
 def main() -> int:
+    runner = None
+    event = None
     try:
         event = json.load(sys.stdin)
-        if event.get("tool_name") == "apply_patch":
-            settings = ConfigurationLoader(CONFIG_PATH).load()
-            snapshots = SnapshotStore()
-            checker = SnapshotChecker(
-                AnalyzerOrchestrator(settings, (cls() for cls in BUILTIN_ANALYZERS)),
-                DefaultRegressionPolicy(),
-                snapshots,
+        runtime = importlib.import_module("codex_harness.hooks.runtime")
+        presentation = importlib.import_module("codex_harness.hooks.presentation")
+        runner = runtime.HookRuntime()
+        result = runner.execute(event, "PostToolUse")
+        output = json.dumps(presentation.result_response("PostToolUse", result))
+    except (Exception, SystemExit) as exc:
+        persistence = ""
+        if runner is not None:
+            try:
+                runner.record_error(event, "PostToolUse")
+            except (Exception, SystemExit):
+                persistence = "; execution record unavailable (UNKNOWN)"
+        reason = f"HARNESS_ERROR: Verification infrastructure failure ({type(exc).__name__}): {exc}{persistence}"
+        output = json.dumps(
+            {
+                "decision": "block",
+                "reason": reason,
+                "hookSpecificOutput": {
+                    "hookEventName": "PostToolUse",
+                    "additionalContext": reason,
+                },
+            }
+        )
+    try:
+        print(output, flush=True)
+    except (OSError, ValueError, UnicodeError):
+        sys.stdout = None
+        try:
+            print(
+                "HARNESS_ERROR: Unable to deliver hook response",
+                file=sys.stderr,
+                flush=True,
             )
-            hook = PostToolHook(
-                settings,
-                RetryStore(HARNESS_ROOT / "state", os.environ),
-                snapshots,
-                checker,
-            )
-            reason = hook.process_patch(event)
-            if reason is not None:
-                print(json.dumps(block_response(reason), ensure_ascii=False))
-    except Exception as exc:
-        reason = f"Verification infrastructure failure: {type(exc).__name__}: {exc}"
-        print(json.dumps(block_response(reason), ensure_ascii=False))
+        except (OSError, ValueError, UnicodeError):
+            sys.stderr = None
+        return 2
     return 0
 
 
