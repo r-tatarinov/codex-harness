@@ -5,7 +5,6 @@ from .analyzers.schema import ToolFinding
 
 
 class DefaultRegressionPolicy:
-
     def compare(
         self, before: Sequence[ToolFinding], after: Sequence[ToolFinding]
     ) -> list[ToolFinding]:

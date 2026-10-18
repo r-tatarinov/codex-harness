@@ -25,7 +25,7 @@ Harness connects Ruff, Flake8, Pylint, Black, and MyPy as external analyzers. Th
 
 ## Project version and releases
 
-The package version is `0.1.1`, as recorded in [pyproject.toml](https://github.com/r-tatarinov/codex-harness/blob/master/pyproject.toml). Published versions are listed on [GitHub Releases](https://github.com/r-tatarinov/codex-harness/releases).
+The package version is `0.1.2`, as recorded in [pyproject.toml](https://github.com/r-tatarinov/codex-harness/blob/master/pyproject.toml). Published versions are listed on [GitHub Releases](https://github.com/r-tatarinov/codex-harness/releases).
 
 ## Overview and lifecycle
 
@@ -101,6 +101,12 @@ These rules measure different properties. In particular, physical lines and stat
 When `CFQ001` is selected, Flake8 runs it in an isolated Harness pass. The `flake8-functions` plugin supplies the measured length, and Harness associates it with a fully qualified function name. The target project's Flake8 configuration and `noqa` do not disable this selected metric.
 
 When Ruff is enabled, it supplies the other four numeric metrics in an isolated pass with limits from `~/.codex/harness/config/quality.toml`; lint preview is enabled for that pass. A separate regular pass follows `use_project_config` and the configured rule selectors. By default, it uses the project's settings and adds `PLC0415`. Numeric findings are compared only once. Project metric limits do not replace Harness limits, while a direct manual Ruff run uses the project's own settings.
+
+Python imports belong at module scope. Ruff's [`PLC0415`](https://docs.astral.sh/ruff/rules/import-outside-top-level/) reports ordinary `import` and `from ... import ...` statements inside functions, methods, classes and nested functions. Repository lint enables it with `[tool.ruff.lint] extend-select = ["PLC0415"]`. Installed hooks use the packaged `[tools.ruff.rules] extend_select = ["PLC0415"]` default, passed as `--extend-select` to Ruff; they do not depend on the Harness checkout's `pyproject.toml`. The existing `ruff>=0.16,<0.17` dependency supports the rule.
+
+For an existing customized `~/.codex/harness/config/quality.toml`, keep Ruff enabled and append `PLC0415` to `tools.ruff.rules.extend_select` without removing other selectors. Explicitly overridden selector lists, ignore settings, exclusions and project suppressions retain their existing semantics; an installation with the rule disabled does not enforce this policy. Configuration is not rewritten automatically. Existing import debt is compared against the baseline; new occurrences fail verification, while moving lines or reducing debt is allowed.
+
+Hook bootstraps intentionally load the internal runtime inside their exception boundary. Their ordinary imports stay at module scope; protected loading is required to turn dependency import failures into `HARNESS_ERROR`. No import was moved to dynamic loading to evade lint.
 
 Ruff, Flake8, Pylint, Black, and MyPy implement one analyzer interface. Only tools whose `enabled` flag is true run. Adapters own process invocation and tool-specific parsing; orchestration and hooks work with normalized findings. Another analyzer can be added without changing either hook.
 
@@ -400,6 +406,7 @@ After installing the current checkout as described under Installation, run these
 ```bash
 find checks hooks src -type f -name '*.py' -exec codex-harness-check {} +
 python3 -m ruff check checks hooks src
+python3 -m ruff format --check checks hooks src
 python3 -m black --check --target-version py312 checks hooks src
 python3 -m mypy --check-untyped-defs --follow-untyped-imports -p codex_harness
 ```
@@ -549,17 +556,6 @@ If Codex never launches the process, skips an untrusted hook, uses an uncovered 
 4. Restart Codex, review and trust the changed definitions in `/hooks`, then run `codex-harness doctor` from the installed environment.
 
 No automatic rewrite of user configuration is performed.
-
-### Installed-wheel integration checks
-
-The regression suite uses Python's standard-library `unittest`. In a disposable development environment with the build frontend and backend installed, run:
-
-```bash
-python -m pip install build 'setuptools>=77'
-python -m unittest discover -s tests -v
-```
-
-The suite builds a wheel from a clean temporary source copy, installs it and its dependencies into a fresh venv, removes the source copy, and exercises real console scripts from unrelated working directories. Temporary homes isolate quality configuration and runtime state. Fault injection changes only the temporary installed package. Wheel artifacts are retained under the reported temporary directory for inspection. These are subprocess integration checks, not a Codex CLI end-to-end test. Real Codex lifecycle validation requires an available model and an isolated, reviewed hook configuration.
 
 ## Current limitations
 

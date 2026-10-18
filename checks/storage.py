@@ -40,7 +40,6 @@ class AtomicFile:
                 try:
                     temporary.unlink(missing_ok=True)
                 except OSError:
-
                     pass
 
     def backup_to(self, path: Path) -> None:

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "codex-harness"
-version = "0.1.1"
+version = "0.1.2"
 description = "Deterministic code-quality hooks for Codex"
 readme = "README.md"
 license = "Apache-2.0"
@@ -53,6 +53,9 @@ codex_harness = "src/codex_harness"
 
 [tool.setuptools.package-data]
 codex_harness = ["defaults/*.toml"]
+
+[tool.ruff.lint]
+extend-select = ["PLC0415"]
 
 [tool.ruff.lint.extend-per-file-ignores]
 "hooks/pre_tool.py" = ["BLE001"]

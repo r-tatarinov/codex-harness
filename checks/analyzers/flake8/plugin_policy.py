@@ -5,7 +5,6 @@ from ...config.schema import ToolConfig
 
 
 class Flake8PluginPolicy:
-
     def validate(self, config: ToolConfig) -> None:
         prefixes = {entry.name for entry in entry_points(group="flake8.extension")}
         for plugin in config.plugins:

@@ -1,18 +1,22 @@
-name: Verify installed hooks
+name: Check code quality
 
 on:
   push:
   pull_request:
 
 jobs:
-  wheel-integration:
+  quality-checks:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - name: Install build tooling
-        run: python -m pip install build 'setuptools>=77'
-      - name: Exercise installed wheel and hook protocol
-        run: python -m unittest discover -s tests -v
+      - name: Install Harness and analyzers
+        run: python -m pip install .
+      - name: Check lint, formatting, and installed package types
+        run: |
+          python -m ruff check checks hooks src
+          python -m ruff format --check checks hooks src
+          python -m black --check --target-version py312 checks hooks src
+          python -m mypy --check-untyped-defs --follow-untyped-imports -p codex_harness
